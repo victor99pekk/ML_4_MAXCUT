@@ -3,15 +3,17 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PointerNet import PointerNetwork
+from config import *
 
-train_file    = "experiments/max_cut/data/maxcut_train_10.csv"
-test_file     = "experiments/max_cut/data/maxcut_test_10.csv"
+train_file    = f"data/train_n={n}.csv"
+test_file     = f"data/test_n={n}.csv"
 embedding_dim = 128
 hidden_dim    = 256
 batch_size    = 16
 num_epochs    = 5 * 10**2
 lr            = 0.01
 path = "experiments/max_cut/neural_network/saved_models/"
+graph_file = "data/graph_n={n}.png"
 
 def load_dataset(filename):
     # Each row has n*n adjacency entries (0/1) + n solution entries (0/1)
@@ -75,6 +77,9 @@ for epoch in range(1, num_epochs+1):
     # if epoch == 1 or epoch % 10 == 0:
     print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
 
+    # ...existing code...
+    print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
+
     # ── Evaluation on Test Set ──────────────────────────────────────────────────────
     model.eval()
     with torch.no_grad():
@@ -97,5 +102,25 @@ for epoch in range(1, num_epochs+1):
                     correct += 1
                 accuracy = correct / N_test * 100
         print(f"\nTest Accuracy: {correct}/{N_test} = {accuracy:.2f}%")
-        torch.save(model.state_dict(), f"experiments/max_cut/neural_network/saved_models/n={n}.pth")
+        torch.save(model.state_dict(), f"neural_network/saved_models/n={n}.pth")
         # print("Saved model in file ptr_net_weights.pth")
+
+    # ── Evaluation on First 200 Training Data Points ────────────────────────────────
+    with torch.no_grad():
+        N_eval = min(200, X_train_t.size(0))
+        correct = 0
+        for i in range(0, N_eval, batch_size):
+            batch_X = X_train_t[i:i+batch_size]
+            outputs = model(batch_X)
+            for j, out_seq in enumerate(outputs):
+                eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
+                chosen  = set(out_seq[:eos_pos])
+                pred    = np.zeros(n, dtype=int)
+                pred[list(chosen)] = 1
+
+                target = Y_train[i + j]
+                if np.array_equal(pred, target) or np.array_equal(1 - pred, target):
+                    correct += 1
+                accuracy = correct / N_eval * 100
+        print(f"Train Accuracy (first 200): {correct}/{N_eval} = {accuracy:.2f}%")
+# ...existing code...
