@@ -15,10 +15,9 @@ class PointerNetwork(nn.Module):
             hidden_dim: Hidden state size for the LSTM encoder and decoder.
         """
         super(PointerNetwork, self).__init__()
-        self.name = "LSTM-PointerNetwork"
         self.input_dim = input_dim
-        self.embedding_dim = embedding_dim * int(input_dim/10)
-        self.hidden_dim = hidden_dim * int(input_dim/10)
+        self.embedding_dim = embedding_dim 
+        self.hidden_dim = hidden_dim
         self.input_embed = nn.Linear(input_dim, embedding_dim) # embedding for each row
          # for encoder to process the rows as a sequence
         self.encoder_lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)

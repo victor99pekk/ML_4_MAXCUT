@@ -27,5 +27,4 @@ Each graph used in these experiments is generated with a planted partition for t
     - If the nodes are in different groups, they are connected with probability `P`.
 - The result is an `n x n` adjacency matrix of 0/1 edges, and a length-`n` vector indicating the planted partition (the ground truth group assignment for each node).
 
-
 ---
