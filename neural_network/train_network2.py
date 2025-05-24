@@ -4,6 +4,7 @@
 # It loads graph data, trains the model, and evaluates its performance.
 
 import math
+import os
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -66,12 +67,17 @@ def evaluate(model, X_test_t, Y_test, X_train_t, Y_train, batch_size, n, test_ac
     plt.tight_layout()
     plt.savefig(plot_file)
     plt.close()
+    return test_accuracies[-1]
+
+
+
 
 
 import matplotlib.pyplot as plt
 # ...existing code...
 
-def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs, train_seqs, X_test_t, Y_test, test_seqs, plot_file):
+def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs, train_seqs, X_test_t, Y_test, test_seqs, folder_path):
+    # try:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     N_train = X_train_t.size(0)
     train_losses = []
@@ -92,14 +98,41 @@ def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size, num_epoch
             epoch_loss += loss.item() * idx.size(0)
             # Evaluate on test set every 10 epochs
             if i % 10 == 0:
-                evaluate(model, X_test_t, Y_test, X_train_t, Y_train, batch_size, n, test_accuracies, train_losses, plot_file)
+                evaluate(model, X_test_t, Y_test, X_train_t, Y_train, batch_size, n, test_accuracies, train_losses, folder_path + f"/{model.name}_n={n}_epoch_{epoch}.png")
         avg_loss = epoch_loss / N_train
         train_losses.append(avg_loss)
         print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
-        torch.save(model.state_dict(), f"neural_network/saved_models/{model.name}_n={n}.pth")
+            # torch.save(model.state_dict(), f"neural_network/saved_models/{model.name}_n={n}.pth")
+    # finally:
+        # torch.save(model.state_dict(), f"{folder_path}/{model.name}_n={n}.pth")
+        # return train_losses, test_accuracies
 
+import os
 
-        
+def write_experiment_info_txt(
+    i, model, optimizer, batch_size, num_epochs, lr, n, train_file, test_file, out_file="experiment_info.txt", test_accuracies=None
+):
+    # Determine experiment number by counting existing experiment files
+    print(out_file)
+
+    with open(out_file, "w") as f:
+        f.write(f"========== Experiment {i} Information ==========\n")
+        f.write(f"\n\n")
+        f.write(f"Network Name: {getattr(model, 'name', type(model).__name__)}\n")
+        f.write(f"Network Architecture:\n{model}\n")
+        f.write(f"Optimizer: {type(optimizer).__name__}\n")
+        f.write(f"Learning Rate: {lr}\n")
+        f.write(f"Batch Size: {batch_size}\n")
+        f.write(f"Epochs: {num_epochs}\n")
+        f.write(f"Input Dimension (n): {n}\n")
+        f.write(f"Train File: {train_file}\n")
+        f.write(f"Test File: {test_file}\n")
+        f.write(f"Device: {next(model.parameters()).device}\n")
+        f.write(f"Number of Parameters: {sum(p.numel() for p in model.parameters())}\n")
+        # if test_accuracies is not None and len(test_accuracies) > 0:
+        #     f.write(f"Final Test Accuracy: {test_accuracies[-1]*100:.2f}%\n")
+        # f.write("============================================\n")
+    print(f"Experiment info written to {out_file}")   
 
 def main():
     from config import n
@@ -107,7 +140,7 @@ def main():
     test_file     = f"data/test_n={n}.csv"
     X_train, Y_train, n_train = load_dataset(train_file)
     X_test,  Y_test,  n_test  = load_dataset(test_file)
-
+    load = False
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 16
@@ -115,8 +148,16 @@ def main():
     lr            = 0.01
     path = None
     path = "neural_network/saved_models/"
+    base_name = "neural_network/experiments/nbr_"
+    ext = ".txt"
+    i = 1
+    while os.path.exists(f"neural_network/experiments/nbr_{i}"):
+        i += 1
     assert n_train == n_test, "Train/test node count mismatch"
     n = n_train
+    folder_path = f"neural_network/experiments/nbr_{i}"
+    os.makedirs(folder_path, exist_ok=True)
+    out_file = f"{folder_path}/experiment_info.txt"
 
     train_seqs = build_target_sequences(Y_train, n)
     test_seqs  = build_target_sequences(Y_test,  n)
@@ -129,14 +170,27 @@ def main():
                         embedding_dim=embedding_dim,
                         hidden_dim=hidden_dim).to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
-    plot_file = f"neural_network/plots/{model.name}_n={n}.png"
+    # plot_file = f"neural_network/experiments/nbr_{i}/{model.name}_n={n}.png"
 
-    training_loop(model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
-                    train_seqs, X_test_t, Y_test, test_seqs, plot_file)
-
-    if path:
+    # training_loop(model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
+    #                 train_seqs, X_test_t, Y_test, test_seqs, plot_file)
+    if load:
         load_state = torch.load(path + f"ptr_net_weights_n={n}.pth", map_location="cpu")
         model.load_state_dict(load_state)
+    try:
+        training_loop(
+            model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
+            train_seqs, X_test_t, Y_test, test_seqs, folder_path
+        )
+    finally:
+        print("Training complete. Saving model state...")
+        torch.save(model.state_dict(), f"{folder_path}/{model.name}_n={n}.pth")
+
+        write_experiment_info_txt(
+            i, model, optimizer, batch_size, num_epochs, lr, n, train_file, test_file,
+            out_file=out_file
+        )
+
     
 
 

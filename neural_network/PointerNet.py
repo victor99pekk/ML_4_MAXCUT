@@ -16,18 +16,19 @@ class PointerNetwork(nn.Module):
         """
         super(PointerNetwork, self).__init__()
         self.name = "LSTM-PointerNetwork"
+        self.mult = 4
         self.input_dim = input_dim
-        self.embedding_dim = embedding_dim * int(input_dim/10)
-        self.hidden_dim = hidden_dim * int(input_dim/10)
-        self.input_embed = nn.Linear(input_dim, embedding_dim) # embedding for each row
+        self.embedding_dim = embedding_dim * self.mult
+        self.hidden_dim = hidden_dim * self.mult
+        self.input_embed = nn.Linear(self.input_dim, self.embedding_dim) # embedding for each row
          # for encoder to process the rows as a sequence
-        self.encoder_lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+        self.encoder_lstm = nn.LSTM(self.embedding_dim, self.hidden_dim, batch_first=True)
         # LSTM decoder generates the output sequence of node indices
-        self.decoder_lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+        self.decoder_lstm = nn.LSTM(self.embedding_dim, self.hidden_dim, batch_first=True)
         # embedding for start vector of the decoder
-        self.decoder_start = nn.Parameter(torch.FloatTensor(embedding_dim))
+        self.decoder_start = nn.Parameter(torch.FloatTensor(self.embedding_dim))
         # Learnable EOS token
-        self.enc_eos = nn.Parameter(torch.FloatTensor(hidden_dim))
+        self.enc_eos = nn.Parameter(torch.FloatTensor(self.hidden_dim))
         nn.init.uniform_(self.decoder_start, -0.1, 0.1)
         nn.init.uniform_(self.enc_eos, -0.1, 0.1)
 
