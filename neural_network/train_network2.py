@@ -34,7 +34,7 @@ def build_target_sequences(Y, n):
         seqs.append(set1 + [eos] + set0)
     return seqs
 
-def evaluate(model, X_test_t, Y_test, X_train_t, Y_train, batch_size, n, test_accuracies, train_losses, plot_file):
+def evaluate(model, X_test_t, Y_test, batch_size, n, test_accuracies, train_losses, plot_file):
 # ── Evaluation on Test Set ──────────────────────────────────────────────────────
     model.eval()
     with torch.no_grad():
@@ -120,6 +120,8 @@ def write_experiment_info_txt(
         f.write(f"\n\n")
         f.write(f"Network Name: {getattr(model, 'name', type(model).__name__)}\n")
         f.write(f"Network Architecture:\n{model}\n")
+        f.write(f"embedding_dim: {model.embedding_dim}\n")
+        f.write(f"hidden_dim: {model.hidden_dim}\n")
         f.write(f"Optimizer: {type(optimizer).__name__}\n")
         f.write(f"Learning Rate: {lr}\n")
         f.write(f"Batch Size: {batch_size}\n")
@@ -185,7 +187,7 @@ def main():
     finally:
         print("Training complete. Saving model state...")
         torch.save(model.state_dict(), f"{folder_path}/{model.name}_n={n}.pth")
-
+        test_acc = evaluate(model, X_test_t, Y_test, X_train_t, Y_train, batch_size, n, test_accuracies, train_losses, folder_path + f"/{model.name}_n={n}_epoch_{epoch}.png")
         write_experiment_info_txt(
             i, model, optimizer, batch_size, num_epochs, lr, n, train_file, test_file,
             out_file=out_file
