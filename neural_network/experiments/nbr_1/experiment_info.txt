@@ -2,17 +2,23 @@
 
 
 Network Name: LSTM-PointerNetwork
+Test Accuracy: 9.00%
+
 Network Architecture:
 PointerNetwork(
   (input_embed): Linear(in_features=10, out_features=512, bias=True)
   (encoder_lstm): LSTM(512, 1024, batch_first=True)
   (decoder_lstm): LSTM(512, 1024, batch_first=True)
 )
+embedding_dim: 512
+hidden_dim: 1024
+
 Optimizer: SGD
 Learning Rate: 0.01
 Batch Size: 16
 Epochs: 500
 Input Dimension (n): 10
+
 Train File: data/train_n=10.csv
 Test File: data/test_n=10.csv
 Device: cpu
