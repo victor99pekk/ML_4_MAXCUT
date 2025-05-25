@@ -16,7 +16,7 @@ class PointerNetwork(nn.Module):
         """
         super(PointerNetwork, self).__init__()
         self.name = "LSTM-PointerNetwork"
-        self.mult = 4
+        self.mult = 8
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim * self.mult
         self.hidden_dim = hidden_dim * self.mult

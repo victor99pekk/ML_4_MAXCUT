@@ -8,6 +8,8 @@ PointerNetwork(
   (encoder_lstm): LSTM(512, 1024, batch_first=True)
   (decoder_lstm): LSTM(512, 1024, batch_first=True)
 )
+embedding_dim: 512
+hidden_dim: 1024
 Optimizer: SGD
 Learning Rate: 0.01
 Batch Size: 16

@@ -4,10 +4,12 @@
 Network Name: LSTM-PointerNetwork
 Network Architecture:
 PointerNetwork(
-  (input_embed): Linear(in_features=10, out_features=512, bias=True)
-  (encoder_lstm): LSTM(512, 1024, batch_first=True)
-  (decoder_lstm): LSTM(512, 1024, batch_first=True)
+  (input_embed): Linear(in_features=10, out_features=1024, bias=True)
+  (encoder_lstm): LSTM(1024, 2048, batch_first=True)
+  (decoder_lstm): LSTM(1024, 2048, batch_first=True)
 )
+embedding_dim: 1024
+hidden_dim: 2048
 Optimizer: SGD
 Learning Rate: 0.01
 Batch Size: 16
@@ -16,4 +18,4 @@ Input Dimension (n): 10
 Train File: data/train_n=10.csv
 Test File: data/test_n=10.csv
 Device: cpu
-Number of Parameters: 12606464
+Number of Parameters: 50378752
