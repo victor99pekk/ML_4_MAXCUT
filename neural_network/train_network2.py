@@ -113,6 +113,18 @@ def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size,
 
 import os
 
+def plot_train_loss(train_losses, model_name, n, plot_path):
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label="Training Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title(f"Training Cross Entropy - Loss over Epochs for {model_name}, n={n}")
+    plt.ylim(0, max(train_losses) * 1.1)  # Set y-axis limits
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(plot_path)
+    plt.close()
+
 def plot_test_acc(test_accuracies, model_name, n, plot_path):
     plt.figure(figsize=(10, 5))
     # plt.plot(train_losses, label="Training Loss")
@@ -128,7 +140,7 @@ def plot_test_acc(test_accuracies, model_name, n, plot_path):
 
 
 def write_experiment_info_txt(
-    i, model, optimizer, batch_size, num_epochs, lr, n, train_file, test_file, test_acc, out_file="experiment_info.txt"
+    i, model, optimizer, batch_size, num_epochs, lr, n, train_file, test_file, test_acc, train_loss, out_file="experiment_info.txt"
 ):
     # Determine experiment number by counting existing experiment files
     print(out_file)
@@ -136,6 +148,7 @@ def write_experiment_info_txt(
     with open(out_file, "w") as f:
         f.write(f"========== Experiment {i} Information ==========\n")
         f.write(f"\n\nNetwork Name: {getattr(model, 'name', type(model).__name__)}\n")
+        f.write(f"Train cross-entropy loss: {train_loss*100:.2f}%\n")
         f.write(f"Test Accuracy: {test_acc*100:.2f}%\n\n")
         # f.write(f"Network Name: {getattr(model, 'name', type(model).__name__)}\n")
         f.write(f"Network Architecture:\n{model}\n")
@@ -164,7 +177,7 @@ def main():
     load = False
     embedding_dim = 128
     hidden_dim    = 256
-    batch_size    = 16
+    batch_size    = 6
     num_epochs    = 5 * 10**2
     lr            = 0.01
     path = None
@@ -179,7 +192,8 @@ def main():
     folder_path = f"neural_network/experiments/nbr_{i}"
     os.makedirs(folder_path, exist_ok=True)
     out_file = f"{folder_path}/experiment_info.txt"
-    plot_file = f"{folder_path}/test_acc={n}.png"
+    test_plot_file = f"{folder_path}/test_acc={n}.png"
+    train_plot_file = f"{folder_path}/train_loss={n}.png"
 
     train_seqs = build_target_sequences(Y_train, n)
     test_seqs  = build_target_sequences(Y_test,  n)
@@ -201,11 +215,11 @@ def main():
         load_state = torch.load(path + f"ptr_net_weights_n={n}.pth", map_location="cpu")
         model.load_state_dict(load_state)
     try:
-        # plot_repeat = plot_file
-        plot_repeat = None
+        # test_plot_file = plot_file
+        test_plot_file = None
         training_loop(
             model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
-            train_seqs, X_test_t, Y_test, plot_file, test_accs, train_losses, plot_repeat
+            train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
         )
     finally:
         print("Training complete. Saving model state...")
@@ -213,9 +227,10 @@ def main():
         test_acc = evaluate(model, X_test_t, Y_test, batch_size, n)
         write_experiment_info_txt(
             i, model, optimizer, batch_size, num_epochs, lr, n, train_file, test_file,
-            test_acc, out_file=out_file
+            test_acc, train_losses[-1], out_file=out_file
         )
-        plot_test_acc(test_accs, model.name, n, plot_file)
+        plot_test_acc(test_accs, model.name, n, test_plot_file)
+        plot_train_loss(train_losses, model.name, n, train_plot_file)
 
     
 
