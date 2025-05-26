@@ -1,8 +1,11 @@
 
-Generate data by setting the parameters in generate_data.py and then run the file.
+GENERATE DATA: 
+by setting the parameters in generate_data.py and then run the file.
 The .csv data files will appear in this folder.
 
-DATA INFO
+
+
+DATA INFO:
 train n= 6 contains 200k training data points
 train n= 6 small contains 20k training data points
 test n=6 contains 1k data points
