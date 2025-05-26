@@ -7,7 +7,7 @@ class PointerNetwork(nn.Module):
     Encodes an input graph (adjacency matrix) and outputs a sequence of node indices 
     indicating one partition (with a special end token separating the two partitions).
     """
-    def __init__(self, input_dim: int, embedding_dim: int, hidden_dim: int):
+    def __init__(self, input_dim: int, embedding_dim: int, hidden_dim: int, multiplier: int = 1):
         """
         Args:
             input_dim: Dimension of each input element's feature vector (for Max-Cut, input_dim = n, the number of nodes).

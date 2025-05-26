@@ -8,7 +8,10 @@ import os
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PointerNet import PointerNetwork
+# from neural_network.networks.PointerNet import PointerNetwork
+from networks.PointerNet import *
+from networks.HybridPointer import *
+from networks.TransformerPointer import *
 import argparse
 
 
@@ -56,7 +59,7 @@ def evaluate(model, X, Y, batch_size, n):
     # print("Saved model in file ptr_net_weights.pth")
 
     # ── Plotting ──────────────────────────────────────────────────────────────────────
-    
+    model.train()  # Switch back to training mode
     return accuracy
 
 
@@ -175,11 +178,15 @@ def main():
     X_train, Y_train, n_train = load_dataset(train_file)
     X_test,  Y_test,  n_test  = load_dataset(test_file)
     load = False
+    # model_name = "PointerNetwork"   
+    # model_name = "HybridPointer"
+    model_name = "TransformerPointer"
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 16
     num_epochs    = 1 * 10**2
     lr            = 0.01
+    multiplier = 1
     path = None
     path = "neural_network/saved_models/"
     base_name = "neural_network/experiments/nbr_"
@@ -203,9 +210,21 @@ def main():
     X_test_t  = torch.tensor(X_test,  device=device)  # shape (N_test,  n, n)
     test_accs = []
     train_losses = []
-    model = PointerNetwork(input_dim=n,
-                        embedding_dim=embedding_dim,
-                        hidden_dim=hidden_dim).to(device)
+    if model_name == "PointerNetwork":
+        model = PointerNetwork(input_dim=n,
+                            embedding_dim=embedding_dim,
+                            hidden_dim=hidden_dim,
+                            multiplier=multiplier).to(device)
+    elif model_name == "HybridPointer":
+        model = HybridPointerNetwork(input_dim=n,
+                            embedding_dim=embedding_dim,
+                            hidden_dim=hidden_dim,
+                            multiplier=multiplier).to(device)
+    elif model_name == "TransformerPointer":
+        model = TransformerPointerNetwork(input_dim=n,
+                            embedding_dim=embedding_dim,
+                            hidden_dim=hidden_dim,
+                            multiplier=multiplier).to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
     # plot_file = f"neural_network/experiments/nbr_{i}/{model.name}_n={n}.png"
 
@@ -216,6 +235,7 @@ def main():
         model.load_state_dict(load_state)
     try:
         # test_plot_file = plot_file
+        print("hej")
         test_plot_file = None
         training_loop(
             model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
@@ -234,8 +254,6 @@ def main():
         plot_train_loss(train_losses, model.name, n, train_plot_file)
 
     
-
-
 
 
 if __name__ == "__main__":
