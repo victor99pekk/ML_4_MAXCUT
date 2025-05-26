@@ -2,8 +2,8 @@ import numpy as np
 import random
 
 # Parameters for dataset generation
-n = 6               # total number of nodes (must be even)
-num_train = 200000     # number of training samples to generate
+n = 50               # total number of nodes (must be even)
+num_train = 5 * 10**4     # number of training samples to generate
 num_test = 1000       # number of test samples to generate
 train_file = "data/generated_train.csv"
 test_file  = "data/generated_test.csv"

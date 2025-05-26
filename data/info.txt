@@ -3,9 +3,12 @@ Generate data by setting the parameters in generate_data.py and then run the fil
 The .csv data files will appear in this folder.
 
 DATA INFO
-all data files where n > 6 contain 200 test data points and 50K
+train n= 6 contains 200k training data points
+train n= 6 small contains 20k training data points
+test n=6 contains 1k data points
+
+train n= 10 contains 50k data points
+test n=10 contains 1k data points
+
+the rest contain 200 test data points and 50K
 training data points
-
-
-the data files with n = 6, have 1000 test cases and 200k training
-data points
