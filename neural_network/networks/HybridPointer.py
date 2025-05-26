@@ -14,7 +14,7 @@ class HybridPointerNetwork(nn.Module):
         """
         super(HybridPointerNetwork, self).__init__()
         self.name = "Hybrid-PointerNetwork"
-        self.mult = 16
+        self.mult = multiplier
         self.input_dim = input_dim
         # Scale dimensions by 16 (like original)
         self.embedding_dim = embedding_dim * self.mult
@@ -111,10 +111,15 @@ class HybridPointerNetwork(nn.Module):
                 step_loss = F.cross_entropy(logits, target_indices, ignore_index=-100, reduction='sum')
                 loss += step_loss
                 # Update the mask of selected indices using the target (teacher forcing uses true index)
-                for i in range(batch_size):
-                    idx = int(target_indices[i].item())
-                    if idx >= 0:  # skip padding
-                        selected_mask[i, idx] = True
+                # for i in range(batch_size):
+                #     idx = int(target_indices[i].item())
+                #     if idx >= 0:  # skip padding
+                #         selected_mask[i, idx] = True
+                if target_indices.dim() == 1:
+                    update_mask = F.one_hot(target_indices.clamp(0, n), num_classes=n+1).bool()
+                else:
+                    update_mask = F.one_hot(target_indices[:, 0].clamp(0, n), num_classes=n+1).bool()
+                selected_mask = selected_mask | update_mask
                 # Prepare next decoder input from the target index (teacher forcing)
                 # Use zero vector if EOS selected, else use the corresponding node's embedding
                 # Build extended node feature tensor (node feature embeddings + zero for EOS)
