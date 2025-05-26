@@ -2,7 +2,7 @@ import math
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PointerNet import PointerNetwork
+from neural_network.networks.PointerNet import PointerNetwork
 
 train_file    = "experiments/max_cut/data/maxcut_train_50.csv"
 test_file     = "experiments/max_cut/data/maxcut_test_50.csv"
