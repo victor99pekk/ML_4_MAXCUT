@@ -2,11 +2,11 @@ import numpy as np
 import random
 
 # Parameters for dataset generation
-n = 10               # total number of nodes (must be even)
-num_train = 50000     # number of training samples to generate
-num_test = 200       # number of test samples to generate
-train_file = "experiments/max_cut/data/maxcut_train_10.csv"
-test_file  = "experiments/max_cut/data/maxcut_test_10.csv"
+n = 6               # total number of nodes (must be even)
+num_train = 200000     # number of training samples to generate
+num_test = 1000       # number of test samples to generate
+train_file = "data/generated_train.csv"
+test_file  = "data/generated_test.csv"
 
 def generate_maxcut_instance(n: int):
     """Generate one random Max-Cut instance with a planted half/half partition.
