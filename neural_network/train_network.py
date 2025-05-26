@@ -97,7 +97,7 @@ def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size,
                 if step >= thres:
                     step = 0
                     print(f"\n\n{i/1000}:   {N_train-i}")
-                    acc = evaluate(model, X_test_t, Y_test, n)
+                    acc = evaluate(model, X_test_t[:25], Y_test[:25], n)
                     if acc:
                         test_accuracies.append(acc)
                     train_losses.append(loss.item() * idx.size(0) / batch_size)
@@ -187,20 +187,20 @@ def main():
     test_file     = f"data/test_n={n}.csv"
     X_train, Y_train, n_train = load_dataset(train_file)
     X_test,  Y_test,  n_test  = load_dataset(test_file)
-    X_eval = X_train.copy()
-    Y_eval = Y_train.copy()
-    X_test = X_test[:25]  # Ensure train/test have same node count
-    Y_test = Y_test[:25]    # Ensure train/test have same node count
+    # X_eval = X_train.copy()
+    # Y_eval = Y_train.copy()
+    # X_test = X_test[:25]  # Ensure train/test have same node count
+    # Y_test = Y_test[:25]    # Ensure train/test have same node count
     load = False
     model_name = "PointerNetwork"   
     # model_name = "HybridPointer"
-    # model_name = "TransformerPointer"
+    model_name = "TransformerPointer"
     embedding_dim = 128
     hidden_dim    = 256
-    batch_size    = 16
+    batch_size    = 1
     num_epochs    = 1 * 10**2
     lr            = 0.1
-    multiplier = 1
+    multiplier = 2
     path = None
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
     base_name = "neural_network/experiments/nbr_"
@@ -261,7 +261,7 @@ def main():
     finally:
         print("Training complete. Saving model state...")
         torch.save(model.state_dict(), f"{folder_path}/weights.pth")
-        test_acc = evaluate(model, X_eval, Y_eval, n)
+        test_acc = evaluate(model, X_test_t, Y_test, n)
         dur = time.perf_counter() - run_start
         write_experiment_info_txt(
             multiplier, i, model, optimizer, batch_size, samples_seen, num_epochs, lr, n, train_file, test_file,
