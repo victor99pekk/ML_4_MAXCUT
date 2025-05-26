@@ -1,4 +1,4 @@
 *.csv
 *.pth
 
-neural_networks/experiments/*
+neural_network/experiments/*

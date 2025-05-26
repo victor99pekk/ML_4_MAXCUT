@@ -1,21 +1,66 @@
 
 # `LSTM` based Pointer Network
+This folder contains all code and all experiments connected to the neural network part of this reserach project
+## Contents:
+1. [Folders](#folders)
+2. [Networks](#networks)
+3. [Results](#results)
+4. [Continued work](#continuation)
 
 
-## Network Architecture
+## Folders:
+1. __[Experiments-folder](experiments)__: contains a folder for every empirical experiment that has been worth saving the result for. The experiment contains one folder for every single experiment labeld `"nbr_X"` where X is an integer. The experiment "nbr_X"- folder contains `plots`, `network architecture`, the `model-weights` and other `results` from that specific experiment.
 
-The core of our deep learning approach is a **Pointer Network**. This model is designed to process an input graph (represented as an adjacency matrix) and output a sequence of node indices that define one partition of the Max-Cut, using a special end-of-sequence (EOS) token to separate the two partitions.
+2. __[Networks-folder](networks)__: Stand‑alone Python definitions of the different architectures we explored:
 
-The Pointer Network consists of:
-- An input embedding layer that transforms each node's adjacency vector into a learned embedding.
-- An LSTM encoder that processes the sequence of node embeddings, capturing the structure and context of the entire graph.
-- An LSTM decoder that generates the output sequence step by step. At each step, it uses an attention mechanism (pointer) to select the next node or the EOS token, based on the current decoder state and the encoder outputs.
-- During training, the model uses teacher forcing: it is guided by the ground truth sequence, and the loss is computed using cross-entropy between the predicted logits and the true next node (or EOS) at each step.
-- During inference, the model greedily selects the next node or EOS at each step, building the output partition sequence.
-
-This architecture allows the network to learn how to construct a Max-Cut partition by sequentially "pointing" to nodes in the graph, leveraging both the graph structure and the sequence of previous selections.
+   The three different architectures that were used were:
+    1. `pointer_lstm.py` – Baseline LSTM‑based Pointer Network
+    2. `pointer_transformer.py` – Fully‑Transformer Pointer Network
+    3. `pointer_hybrid.py` – Hybrid Self‑Attention + Pointer Network
 
 
+
+
+
+## Networks
+
+
+### 1 · LSTM Pointer Network (baseline)
+
+Our original model is a classic **Pointer Network** with LSTM encoder and decoder. It processes an adjacency matrix, embeds each node, encodes the sequence with an LSTM, and then decodes node-by-node. At every decoding step the model points to either the next node or a special *EOS* symbol, thereby emitting one half of the Max-Cut partition.
+
+__Highlights__
+* `Input` – adjacency row per node → learned embedding.  
+* **Encoder** – bidirectional LSTM captures global graph context.  
+* **Decoder** – unidirectional LSTM; pointer (dot-product) attention over encoder states.  
+* **Training** – teacher forcing with cross-entropy; explicit masking prevents the model from selecting a node twice.  
+* **Inference** – greedy (or beam) search over the pointer distribution.  
+
+---
+
+### 2 · Transformer Pointer Network
+
+This rewrite keeps the pointer idea intact but swaps both LSTMs for **multi-head self-attention** blocks:
+
+* **Encoder** – 2-layer Transformer encoder encodes all nodes in parallel.  
+* **Decoder** – Transformer decoder with causal self-attention plus encoder–decoder attention.  
+* **Pointer** – at each step we dot the current decoder output against all encoder outputs (+ a learned *EOS* vector) to obtain pointer logits.
+
+The interface is **identical** to the LSTM model (same input tensors, same pointer-logit output shape), so existing training scripts need only the import path changed.
+
+---
+
+### 3 · Hybrid Self-Attention Pointer Network
+
+The hybrid variant keeps the **sequential pointer mechanism** of the LSTM model but replaces every LSTM cell with a **single-layer masked self-attention block** and a small feed-forward network:
+
+* Each decoding step runs one masked multi-head attention over the embeddings of all previously selected nodes.  
+* The resulting decoder state queries the (Transformer-encoded) node representations exactly like in the baseline.  
+* A running mask still forbids the model from re-selecting the same node or EOS twice.  
+
+Because only the internal cell changed, no training-loop or data-format changes are required.
+
+---
 
 
 
