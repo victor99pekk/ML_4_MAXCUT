@@ -7,7 +7,7 @@ class TransformerPointerNetwork(nn.Module):
     Encodes the input graph with self-attention and uses a Transformer decoder 
     to produce a pointer distribution over input nodes at each step."""
     def __init__(self, input_dim: int, embedding_dim: int, hidden_dim: int, 
-                 n_heads: int = 8, num_encoder_layers: int = 2, num_decoder_layers: int = 2):
+                 n_heads: int = 8, num_encoder_layers: int = 2, num_decoder_layers: int = 2, multiplier: int = 1):
         """
         Args:
             input_dim: Dimension of each input element's feature vector (for Max-Cut, n = number of nodes).

@@ -37,29 +37,48 @@ def build_target_sequences(Y, n):
         seqs.append(set1 + [eos] + set0)
     return seqs
 
-def evaluate(model, X, Y, batch_size, n):
-# ── Evaluation on Test Set ──────────────────────────────────────────────────────
+# def evaluate(model, X, Y, n):
+# # ── Evaluation on Test Set ──────────────────────────────────────────────────────
+#     model.eval()
+#     with torch.no_grad():
+#         N_test = X.size(0)
+#         correct = 0
+#         for i in range(0, N_test):
+#             batch_X = X
+#             outputs = model(batch_X)
+#             for j, out_seq in enumerate(outputs):
+#                 eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
+#                 chosen  = set(out_seq[:eos_pos])
+#                 pred    = np.zeros(n, dtype=int)
+#                 pred[list(chosen)] = 1
+#                 target = Y
+#                 if np.array_equal(pred, target) or np.array_equal(1 - pred, target):
+#                     correct += 1
+#         accuracy = correct / N_test
+#         print(f"\nTest Accuracy: {correct}/{N_test} = {accuracy:.2f}")
+#     # print("Saved model in file ptr_net_weights.pth")
+
+#     # ── Plotting ──────────────────────────────────────────────────────────────────────
+#     model.train()  # Switch back to training mode
+#     return accuracy
+
+def evaluate(model, X, Y, n):
     model.eval()
     with torch.no_grad():
         N_test = X.size(0)
         correct = 0
-        for i in range(0, N_test, batch_size):
-            batch_X = X[i:i+batch_size]
-            outputs = model(batch_X)
-            for j, out_seq in enumerate(outputs):
-                eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
-                chosen  = set(out_seq[:eos_pos])
-                pred    = np.zeros(n, dtype=int)
-                pred[list(chosen)] = 1
-                target = Y[i + j]
-                if np.array_equal(pred, target) or np.array_equal(1 - pred, target):
-                    correct += 1
+        outputs = model(X)  # Pass the whole batch at once
+        for i, out_seq in enumerate(outputs):
+            eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
+            chosen = set(out_seq[:eos_pos])
+            pred = np.zeros(n, dtype=int)
+            pred[list(chosen)] = 1
+            target = Y[i]
+            if np.array_equal(pred, target) or np.array_equal(1 - pred, target):
+                correct += 1
         accuracy = correct / N_test
         print(f"\nTest Accuracy: {correct}/{N_test} = {accuracy:.2f}")
-    # print("Saved model in file ptr_net_weights.pth")
-
-    # ── Plotting ──────────────────────────────────────────────────────────────────────
-    model.train()  # Switch back to training mode
+    model.train()
     return accuracy
 
 
@@ -76,12 +95,16 @@ def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size,
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     N_train = X_train_t.size(0)
     # plot_path = folder_path
-
+    count = 0
     for epoch in range(1, num_epochs+1):
         model.train()
         perm = torch.randperm(N_train, device=device)
         epoch_loss = 0.0
         for i in range(0, N_train, batch_size):
+            count += 1
+            if count % 1000 == 0:
+                print("count", count)
+            # batch_loss = 0.0
             idx = perm[i:i+batch_size]
             batch_X = X_train_t[idx]
             batch_targets = [train_seqs[j] for j in idx.cpu().tolist()]
@@ -91,38 +114,32 @@ def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size,
             optimizer.step()
             epoch_loss += loss.item() * idx.size(0)
             # Evaluate on test set every 10 epochs
-            if i % 1000 == 0:
-                acc = evaluate(model, X_test_t, Y_test, batch_size, n)
-                test_accuracies.append(acc)
+            if i % 500 == 0:
+                print(f"\n\n{i/1000}:   {N_train-i}")
+                acc = evaluate(model, X_test_t, Y_test, n)
+                if acc:
+                    test_accuracies.append(acc)
+                train_losses.append(loss.item() * idx.size(0) / batch_size)
                 if plot_repeat != None:
                     plot_test_acc(test_accuracies, model.name, n, plot_repeat)
-                # plt.figure(figsize=(10, 5))
-                # plt.plot(train_losses, label="Training Loss")
-                # plt.plot(test_accuracies, label="Test Accuracy")
-                # plt.xlabel("Epoch")
-                # plt.ylabel("Value")
-                # plt.title(f"Training Loss and Test Accuracy over Epochs for {model.name}, n={n}")
-                # plt.legend()
-                # plt.tight_layout()
-                # plt.savefig(plot_path)
-                # plt.close()
         avg_loss = epoch_loss / N_train
-        train_losses.append(avg_loss)
+        # train_losses.append(avg_loss)
         print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
-            # torch.save(model.state_dict(), f"neural_network/saved_models/{model.name}_n={n}.pth")
-    # finally:
-        # torch.save(model.state_dict(), f"{folder_path}/{model.name}_n={n}.pth")
-        # return train_losses, test_accuracies
 
 import os
 
 def plot_train_loss(train_losses, model_name, n, plot_path):
-    plt.figure(figsize=(10, 5))
+    # plt.figure(figsize=(10, 5))
     plt.plot(train_losses, label="Training Loss")
-    plt.xlabel("Epoch")
+    plt.xlabel("Batch")
     plt.ylabel("Loss")
-    plt.title(f"Training Cross Entropy - Loss over Epochs for {model_name}, n={n}")
-    plt.ylim(0, max(train_losses) * 1.1)  # Set y-axis limits
+    plt.title(f"Training Cross Entropy - Loss over Batches for {model_name}, n={n}")
+    # plt.ylim(0, max(train_losses) * 1.1)  # Set y-axis limits
+    # if train_losses and max(train_losses) > 0:
+    #     plt.ylim(0, max(train_losses) * 1.1)
+    #     plt.ylim(0, 1000)
+    # else:
+    #     plt.ylim(0, 1)
     plt.legend()
     plt.tight_layout()
     plt.savefig(plot_path)
@@ -153,8 +170,6 @@ def write_experiment_info_txt(
         f.write(f"\n\nNetwork Name: {getattr(model, 'name', type(model).__name__)}\n")
         f.write(f"Train cross-entropy loss: {train_loss*100:.2f}%\n")
         f.write(f"Test Accuracy: {test_acc*100:.2f}%\n\n")
-        # f.write(f"Network Name: {getattr(model, 'name', type(model).__name__)}\n")
-        f.write(f"Network Architecture:\n{model}\n")
         f.write(f"embedding_dim: {model.embedding_dim}\n")
         f.write(f"hidden_dim: {model.hidden_dim}\n\n")
         f.write(f"Optimizer: {type(optimizer).__name__}\n")
@@ -165,11 +180,21 @@ def write_experiment_info_txt(
         f.write(f"Train File: {train_file}\n")
         f.write(f"Test File: {test_file}\n")
         f.write(f"Device: {next(model.parameters()).device}\n")
-        f.write(f"Number of Parameters: {sum(p.numel() for p in model.parameters())}\n")
+        f.write(f"Number of Parameters: {sum(p.numel() for p in model.parameters())}\n\n")
+        # f.write(f"Network Name: {getattr(model, 'name', type(model).__name__)}\n")
+        f.write(f"Network Architecture:\n{model}\n")
         # if test_accuracies is not None and len(test_accuracies) > 0:
         #     f.write(f"Final Test Accuracy: {test_accuracies[-1]*100:.2f}%\n")
         # f.write("============================================\n")
     print(f"Experiment info written to {out_file}")   
+
+def calc_bacth_size(batch_size, train_size):
+    # Calculate the batch size based on the number of nodes n
+    # For example, if n is 6, we can use a batch size of 1000
+    # If n is larger, we might want to increase the batch size
+    # This is a simple heuristic; you can adjust it as needed
+
+    return train_size // batch_size
 
 def main():
     from config import n
@@ -177,18 +202,21 @@ def main():
     test_file     = f"data/test_n={n}.csv"
     X_train, Y_train, n_train = load_dataset(train_file)
     X_test,  Y_test,  n_test  = load_dataset(test_file)
-    load = False
+    load = True
     # model_name = "PointerNetwork"   
-    # model_name = "HybridPointer"
+    model_name = "HybridPointer"
     model_name = "TransformerPointer"
     embedding_dim = 128
     hidden_dim    = 256
-    batch_size    = 16
+    batch_size    = 10
+    # batch_size    = calc_bacth_size(batch_size, X_train.shape[0])
+    # if batch_size > 500:
+    #     exit(0)
     num_epochs    = 1 * 10**2
-    lr            = 0.01
+    lr            = 0.005
     multiplier = 1
     path = None
-    path = "neural_network/saved_models/"
+    weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
     base_name = "neural_network/experiments/nbr_"
     ext = ".txt"
     i = 1
@@ -231,20 +259,24 @@ def main():
     # training_loop(model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
     #                 train_seqs, X_test_t, Y_test, test_seqs, plot_file)
     if load:
-        load_state = torch.load(path + f"ptr_net_weights_n={n}.pth", map_location="cpu")
+        load_state = torch.load(weights_path, map_location="cpu")
         model.load_state_dict(load_state)
+    interrupted = False
     try:
         # test_plot_file = plot_file
-        print("hej")
         test_plot_file = None
         training_loop(
             model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
             train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
         )
+    except KeyboardInterrupt:
+        interrupted = True
+        print("\n[Ctrl-C] KeyboardInterrupt caught – leaving training loop early …")
+        # fall-through into finally (do *not* re-raise!)
     finally:
         print("Training complete. Saving model state...")
         torch.save(model.state_dict(), f"{folder_path}/{model.name}_n={n}.pth")
-        test_acc = evaluate(model, X_test_t, Y_test, batch_size, n)
+        test_acc = evaluate(model, X_test_t, Y_test, n)
         write_experiment_info_txt(
             i, model, optimizer, batch_size, num_epochs, lr, n, train_file, test_file,
             test_acc, train_losses[-1], out_file=out_file
@@ -252,6 +284,7 @@ def main():
         test_plot_file = f"{folder_path}/test_acc={n}.png"
         plot_test_acc(test_accs, model.name, n, test_plot_file)
         plot_train_loss(train_losses, model.name, n, train_plot_file)
+        print("slut")
 
     
 
