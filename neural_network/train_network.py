@@ -66,6 +66,84 @@ def evaluate(model, X, Y, n):
 import matplotlib.pyplot as plt
 # ...existing code...
 
+import torch
+from torch.cuda.amp import autocast, GradScaler
+
+def training_loop_AMP_optimized(model,
+                  optimizer,
+                  X_train_t,
+                  Y_train,
+                  n,
+                  batch_size,
+                  num_epochs,
+                  train_seqs,
+                  X_test_t,
+                  Y_test,
+                  folder_path,
+                  test_accuracies,
+                  train_losses,
+                  plot_repeat=None,
+                  accumulation_steps: int = 1):
+    """
+    Args:
+      accumulation_steps: number of batches to accumulate gradients over
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    scaler = GradScaler()
+    N_train = X_train_t.size(0)
+    samples_seen = 0
+    step = 0
+    thres = 50 if model.name == "LSTM-PointerNetwork" else 500
+
+    try:
+        for epoch in range(1, num_epochs + 1):
+            model.train()
+            perm = torch.randperm(N_train, device=device)
+            epoch_loss = 0.0
+            optimizer.zero_grad()
+
+            for batch_idx in range(0, N_train, batch_size):
+                idx = perm[batch_idx:batch_idx + batch_size]
+                batch_X = X_train_t[idx].to(device)
+                batch_targets = [train_seqs[j] for j in idx.cpu().tolist()]
+
+                samples_seen += idx.size(0)
+                step += idx.size(0)
+
+                # forward + backward with mixed precision
+                with autocast():
+                    loss_batch = model(batch_X, target_seq=batch_targets)
+                    loss = loss_batch / accumulation_steps
+
+                scaler.scale(loss).backward()
+                epoch_loss += loss_batch.item() * idx.size(0)
+
+                # optimizer step every accumulation_steps
+                if ((batch_idx // batch_size + 1) % accumulation_steps == 0) or (batch_idx + batch_size >= N_train):
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad()
+
+                # periodic evaluation
+                if step >= thres:
+                    step = 0
+                    print(f"\n\nProcessed {samples_seen} samples; remaining in epoch: {N_train - batch_idx}")
+                    acc = evaluate(model, X_test_t[:25].to(device), Y_test[:25], n)
+                    if acc is not None:
+                        test_accuracies.append(acc)
+                    train_losses.append(loss_batch.item())
+                    if plot_repeat is not None:
+                        plot_test_acc(test_accuracies, model.name, n, plot_repeat)
+
+            avg_loss = epoch_loss / N_train
+            print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
+
+    finally:
+        return samples_seen
+
+
 def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size, 
                   num_epochs, train_seqs, X_test_t, Y_test, folder_path, 
                   test_accuracies, train_losses, plot_repeat=None):
@@ -183,8 +261,8 @@ def write_experiment_info_txt(
 
 def main():
     from config import n
-    train_file    = f"data/train_n={n}.csv"
-    test_file     = f"data/test_n={n}.csv"
+    train_file    = f"data/train_n={n}hard.csv"
+    test_file     = f"data/test_n={n}hard.csv"
     X_train, Y_train, n_train = load_dataset(train_file)
     X_test,  Y_test,  n_test  = load_dataset(test_file)
     # X_eval = X_train.copy()
@@ -194,12 +272,12 @@ def main():
     load = False
     model_name = "PointerNetwork"   
     # model_name = "HybridPointer"
-    model_name = "TransformerPointer"
+    # model_name = "TransformerPointer"
     embedding_dim = 128
     hidden_dim    = 256
-    batch_size    = 1
+    batch_size    = 10
     num_epochs    = 1 * 10**2
-    lr            = 0.1
+    lr            = 0.01
     multiplier = 2
     path = None
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
@@ -250,7 +328,7 @@ def main():
         # test_plot_file = plot_file
         test_plot_file = None
         run_start = time.perf_counter()
-        samples_seen = training_loop(
+        samples_seen = training_loop_AMP_optimized(
             model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
             train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
         )

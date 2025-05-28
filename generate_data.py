@@ -2,7 +2,7 @@ import numpy as np
 import random
 
 # Parameters for dataset generation
-n = 50               # total number of nodes (must be even)
+n = 6               # total number of nodes (must be even)
 num_train = 5 * 10**4     # number of training samples to generate
 num_test = 1000       # number of test samples to generate
 train_file = "data/generated_train.csv"
@@ -27,9 +27,9 @@ def generate_maxcut_instance(n: int):
     np.random.shuffle(sol)
     
     # 2) sample the three probabilities for this graph
-    P1 = random.uniform(0.9, 1.0)   # within-group-1
-    P0 = random.uniform(0.9, 1.0)   # within-group-0
-    P  = random.uniform(0.0, 0.1)   # across-groups
+    P1 = random.uniform(0.7, 1.0)   # within-group-1
+    P0 = random.uniform(0.7, 1.0)   # within-group-0
+    P  = random.uniform(0.0, 0.3)   # across-groups
 
     # 3) build symmetric adjacency (0/1) by Bernoulli trials
     W = np.zeros((n, n), dtype=int)
