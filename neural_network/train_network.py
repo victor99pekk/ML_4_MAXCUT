@@ -95,7 +95,10 @@ def training_loop_AMP_optimized(model,
     N_train = X_train_t.size(0)
     samples_seen = 0
     step = 0
-    thres = 50 if model.name == "LSTM-PointerNetwork" else 500
+    if next(model.parameters()).device.type == "cpu":
+        thres = 50 if model.name == "LSTM-PointerNetwork" else 500
+    else:
+        thres = 5000 if model.name == "LSTM-PointerNetwork" else 5000
 
     try:
         for epoch in range(1, num_epochs + 1):
@@ -130,14 +133,17 @@ def training_loop_AMP_optimized(model,
                 if step >= thres:
                     step = 0
                     print(f"\n\nProcessed {samples_seen} samples; remaining in epoch: {N_train - batch_idx}")
-                    acc = evaluate(model, X_test_t[:25].to(device), Y_test[:25], n)
-                    if acc is not None:
-                        test_accuracies.append(acc)
-                    train_losses.append(loss_batch.item())
-                    if plot_repeat is not None:
-                        plot_test_acc(test_accuracies, model.name, n, plot_repeat)
-
+                    # acc = evaluate(model, X_test_t[:25].to(device), Y_test[:25], n)
+                    # if acc is not None:
+                    #     test_accuracies.append(acc)
+                    # train_losses.append(loss_batch.item())
+                    # if plot_repeat is not None:
+                    #     plot_test_acc(test_accuracies, model.name, n, plot_repeat)
+            acc = evaluate(model, X_test_t[:25].to(device), Y_test[:25], n)
+            if acc is not None:
+                test_accuracies.append(acc)
             avg_loss = epoch_loss / N_train
+            train_losses.append(avg_loss)
             print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
 
     finally:
@@ -192,26 +198,38 @@ def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size,
 import os
 
 def plot_train_loss(train_losses, model_name, n, plot_path):
-    # plt.figure(figsize=(10, 5))
-    plt.plot(train_losses, label="Training Loss")
+    import numpy as np
+    def downsample_to_n_points(data, n_points=50):
+        data = np.array(data)
+        if len(data) <= n_points:
+            return data
+        bins = np.array_split(data, n_points)
+        return np.array([b.mean() for b in bins])
+
+    plt.figure(figsize=(10, 5))
+    plot_data = downsample_to_n_points(train_losses, 50)
+    plt.plot(plot_data, label="Training Loss")
     plt.xlabel("Batch")
     plt.ylabel("Loss")
     plt.title(f"Training Cross Entropy - Loss over Batches for {model_name}, n={n}")
-    # plt.ylim(0, max(train_losses) * 1.1)  # Set y-axis limits
-    # if train_losses and max(train_losses) > 0:
-    #     plt.ylim(0, max(train_losses) * 1.1)
-    #     plt.ylim(0, 1000)
-    # else:
-    #     plt.ylim(0, 1)
     plt.legend()
     plt.tight_layout()
     plt.savefig(plot_path)
     plt.close()
 
+import numpy as np
+
+def downsample_to_n_points(data, n_points=50):
+    data = np.array(data)
+    if len(data) <= n_points:
+        return data
+    bins = np.array_split(data, n_points)
+    return np.array([b.mean() for b in bins])
+
 def plot_test_acc(test_accuracies, model_name, n, plot_path):
     plt.figure(figsize=(10, 5))
-    # plt.plot(train_losses, label="Training Loss")
-    plt.plot(test_accuracies, label="Test Accuracy")
+    plot_data = downsample_to_n_points(test_accuracies, 50)
+    plt.plot(plot_data, label="Test Accuracy")
     plt.xlabel("Epoch")
     plt.ylabel("Value")
     plt.title(f"Training Loss and Test Accuracy over Epochs for {model_name}, n={n}")
@@ -261,8 +279,8 @@ def write_experiment_info_txt(
 
 def main():
     from config import n
-    train_file    = f"data/train_n={n}hard.csv"
-    test_file     = f"data/test_n={n}hard.csv"
+    train_file    = f"data/train_n={n}med.csv"
+    test_file     = f"data/test_n={n}med.csv"
     X_train, Y_train, n_train = load_dataset(train_file)
     X_test,  Y_test,  n_test  = load_dataset(test_file)
     # X_eval = X_train.copy()
@@ -275,9 +293,9 @@ def main():
     # model_name = "TransformerPointer"
     embedding_dim = 128
     hidden_dim    = 256
-    batch_size    = 10
+    batch_size    = 40
     num_epochs    = 1 * 10**2
-    lr            = 0.01
+    lr            = 0.1
     multiplier = 2
     path = None
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
