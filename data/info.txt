@@ -28,3 +28,8 @@ files that have P0=P1=0.6 and P=0.2
 MEDIUM
 P=0.25, P0=P1=0.75
 n=50, train contains  30 000
+
+
+EASY-MED
+P=0.15, P0=P1=0.85
+n=50, train contains  50 000

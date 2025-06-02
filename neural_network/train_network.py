@@ -140,8 +140,8 @@ def training_loop_AMP_optimized(model,
                     if acc is not None:
                         test_accuracies.append(acc)
                     train_losses.append(loss_batch.item())
-                    if plot_repeat is not None:
-                        plot_test_acc(test_accuracies, model.name, n, plot_repeat)
+                    # if plot_repeat is not None:
+                    #     plot_test_acc(test_accuracies, model.name, n, plot_repeat)
             # acc = evaluate(model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
             # if acc is not None:
             #     test_accuracies.append(acc)
