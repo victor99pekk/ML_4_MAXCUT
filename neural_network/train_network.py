@@ -95,10 +95,13 @@ def training_loop_AMP_optimized(model,
     N_train = X_train_t.size(0)
     samples_seen = 0
     step = 0
+    test_precision = 0
     if next(model.parameters()).device.type == "cpu":
         thres = 50 if model.name == "LSTM-PointerNetwork" else 500
+        test_precision = 100
     else:
         thres = 5000 if model.name == "LSTM-PointerNetwork" else 5000
+        test_precision = 100
 
     try:
         for epoch in range(1, num_epochs + 1):
@@ -139,7 +142,7 @@ def training_loop_AMP_optimized(model,
                     # train_losses.append(loss_batch.item())
                     # if plot_repeat is not None:
                     #     plot_test_acc(test_accuracies, model.name, n, plot_repeat)
-            acc = evaluate(model, X_test_t[:25].to(device), Y_test[:25], n)
+            acc = evaluate(model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
             if acc is not None:
                 test_accuracies.append(acc)
             avg_loss = epoch_loss / N_train
