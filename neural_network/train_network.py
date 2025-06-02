@@ -98,7 +98,7 @@ def training_loop_AMP_optimized(model,
     test_precision = 0
     if next(model.parameters()).device.type == "cpu":
         thres = 50 if model.name == "LSTM-PointerNetwork" else 500
-        test_precision = 100
+        test_precision = 25
     else:
         thres = 5000 if model.name == "LSTM-PointerNetwork" else 5000
         test_precision = 100
@@ -136,17 +136,17 @@ def training_loop_AMP_optimized(model,
                 if step >= thres:
                     step = 0
                     print(f"\n\nProcessed {samples_seen} samples; remaining in epoch: {N_train - batch_idx}")
-                    # acc = evaluate(model, X_test_t[:25].to(device), Y_test[:25], n)
-                    # if acc is not None:
-                    #     test_accuracies.append(acc)
-                    # train_losses.append(loss_batch.item())
-                    # if plot_repeat is not None:
-                    #     plot_test_acc(test_accuracies, model.name, n, plot_repeat)
-            acc = evaluate(model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
-            if acc is not None:
-                test_accuracies.append(acc)
+                    acc = evaluate(model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
+                    if acc is not None:
+                        test_accuracies.append(acc)
+                    train_losses.append(loss_batch.item())
+                    if plot_repeat is not None:
+                        plot_test_acc(test_accuracies, model.name, n, plot_repeat)
+            # acc = evaluate(model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
+            # if acc is not None:
+            #     test_accuracies.append(acc)
             avg_loss = epoch_loss / N_train
-            train_losses.append(avg_loss)
+            # train_losses.append(avg_loss)
             print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
 
     finally:
@@ -222,7 +222,7 @@ def plot_train_loss(train_losses, model_name, n, plot_path):
 
 import numpy as np
 
-def downsample_to_n_points(data, n_points=50):
+def downsample_to_n_points(data, n_points=150):
     data = np.array(data)
     if len(data) <= n_points:
         return data
