@@ -17,14 +17,14 @@ the rest contain 200 test data points and 50K
 training data points
 
 
-HARD files
+HARD
 files that end with hard have different probabilities of nodes being connected.
 they have P0=P1=unif(0.7,1) and P=unif(0,0.3)
 
-REALLY HARD files
+REALLY-HARD
 files that have P0=P1=0.6 and P=0.2
 
 
-MED
+MEDIUM
 P=0.25, P0=P1=0.75
 n=50, train contains  30 000
