@@ -40,8 +40,8 @@ def make_dataset(num_graphs, n, out_csv, seed=0):
     print(f"Saved {num_graphs} graphs to '{out_csv}' (row length = {n*n + n})")
 
 if __name__ == "__main__":
-    N_NODES     = 3
-    NUM_GRAPHS  = 2
-    dataype     = "train"  # or "test"
-    OUT_CSV     = f"data/neural_network/{dataype}_n={N_NODES}_binary.csv"
+    N_NODES     = 5
+    NUM_GRAPHS  = 20  # Number of graphs to generate
+    dataype     = "test"  # or "test"
+    OUT_CSV     = f"data/maxcut/{dataype}_n={N_NODES}_binary.csv"
     make_dataset(NUM_GRAPHS, N_NODES, OUT_CSV)

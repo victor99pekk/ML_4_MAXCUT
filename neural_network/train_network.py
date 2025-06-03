@@ -282,9 +282,9 @@ def write_experiment_info_txt(
 
 def main():
     # from config import n
-    n = 6
-    train_file    = f"data/train_n={n}med.csv"
-    test_file     = f"data/test_n={n}med.csv"
+    n = 5
+    train_file    = f"data/maxcut/train_n={n}.csv"
+    test_file     = f"data/maxcut/test_n={n}.csv"
     X_train, Y_train, n_train = load_dataset(train_file)
     X_test,  Y_test,  n_test  = load_dataset(test_file)
     load = False
