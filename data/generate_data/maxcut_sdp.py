@@ -40,7 +40,7 @@ def make_dataset_sdp(num_graphs, n, out_csv, seed=0):
     print(f"Saved {num_graphs} graphs to '{out_csv}' (row length = {(n+1)*(n+1) + (n+1)})")
 
 if __name__ == "__main__":
-    N_NODES     = 2
-    NUM_GRAPHS  = 1
-    OUT_CSV_SDP = f"data/train_n={N_NODES}_binary_sdp.csv"
-    make_dataset_sdp(NUM_GRAPHS, N_NODES, OUT_CSV_SDP, seed=42)
+    N_NODES     = 5
+    NUM_GRAPHS  = 1000
+    OUT_CSV_SDP = f"data/test/n={N_NODES}.csv"
+    make_dataset_sdp(NUM_GRAPHS, N_NODES, OUT_CSV_SDP)
