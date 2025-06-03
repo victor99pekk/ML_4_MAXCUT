@@ -281,19 +281,14 @@ def write_experiment_info_txt(
     print(f"Experiment info written to {out_file}")   
 
 def main():
-    from config import n
+    # from config import n
+    n = 6
     train_file    = f"data/train_n={n}med.csv"
     test_file     = f"data/test_n={n}med.csv"
     X_train, Y_train, n_train = load_dataset(train_file)
     X_test,  Y_test,  n_test  = load_dataset(test_file)
-    # X_eval = X_train.copy()
-    # Y_eval = Y_train.copy()
-    # X_test = X_test[:25]  # Ensure train/test have same node count
-    # Y_test = Y_test[:25]    # Ensure train/test have same node count
     load = False
-    model_name = "PointerNetwork"   
-    # model_name = "HybridPointer"
-    # model_name = "TransformerPointer"
+    model_name = "PointerNetwork"
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 40
