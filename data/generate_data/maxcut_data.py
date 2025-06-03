@@ -57,7 +57,7 @@ def make_dataset(num_graphs, n, out_csv, seed=0):
 # ----------------------------------------------------------------------
 # Example CLI usage -----------------------------------------------------
 if __name__ == "__main__":
-    N_NODES     = 20
-    NUM_GRAPHS  = 50_000
+    N_NODES     = 2
+    NUM_GRAPHS  = 1
     OUT_CSV     = f"data/train_n={N_NODES}_binary.csv"
     make_dataset(NUM_GRAPHS, N_NODES, OUT_CSV, seed=42)

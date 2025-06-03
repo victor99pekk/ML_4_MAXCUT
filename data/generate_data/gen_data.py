@@ -2,9 +2,9 @@ import numpy as np
 import random
 
 # Parameters for dataset generation
-n = 20               # total number of nodes (must be even)
-num_train = 5 * 10**4     # number of training samples to generate
-num_test = 1000       # number of test samples to generate
+n = 4               # total number of nodes (must be even)
+num_train = 1#5 * 10**4     # number of training samples to generate
+num_test = 1       # number of test samples to generate
 train_file = f"data/train_n={n}easymed.csv"
 test_file  = f"data/test_n={n}easymed.csv"
 
@@ -30,9 +30,9 @@ def generate_maxcut_instance(n: int):
     P1 = random.uniform(0.7, 1.0)   # within-group-1
     P0 = random.uniform(0.7, 1.0)   # within-group-0
     P  = random.uniform(0.0, 0.3)   # across-groups
-    P1 = 0.85
-    P0 = 0.85
-    P  = 0.15
+    P1 = 1
+    P0 = 1
+    P  = 0
 
     # 3) build symmetric adjacency (0/1) by Bernoulli trials
     W = np.zeros((n, n), dtype=int)
