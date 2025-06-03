@@ -9,7 +9,8 @@ We will try different different maximum cut algorithms on different sized graphs
 There will be 1000 different graphs of each size.
 
 ### Path to test Data
-`data/test/n=x/graphy` where $x \in sizes$ and $y \in [0, 99]$
+`data/test/n=x` where $x \in sizes$ and $y \in [0, 99]$
+row `i` will correspond to the `i`:th graph of that size
 
 ## Results
 save the output for algorithm `z` in the path as a `csv` file
