@@ -2,4 +2,6 @@
 *.pth
 
 neural_network/experiments/*.pth
-reports/*
+report/*
+
+test/
