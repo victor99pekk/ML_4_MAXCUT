@@ -4,4 +4,4 @@
 neural_network/experiments/*.pth
 report/*
 
-test/
+data/test/
