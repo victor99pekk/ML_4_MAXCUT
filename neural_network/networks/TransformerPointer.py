@@ -2,12 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+
 class TransformerNetwork(nn.Module):
     """Fully Transformer-based Pointer Network for Max-Cut.
     Encodes the input graph with self-attention and uses a Transformer decoder 
     to produce a pointer distribution over input nodes at each step."""
     def __init__(self, input_dim: int, embedding_dim: int, hidden_dim: int, 
-                 n_heads: int = 8, num_encoder_layers: int = 2, num_decoder_layers: int = 2, multiplier: int = 1):
+                 n_heads: int = 1, num_encoder_layers: int = 4, num_decoder_layers: int = 2, multiplier: int = 1):
         """
         Args:
             input_dim: Dimension of each input element's feature vector (for Max-Cut, n = number of nodes).
@@ -21,12 +23,9 @@ class TransformerNetwork(nn.Module):
         self.name = "TransformerNetwork"
         self.mult = 1
         self.input_dim = input_dim
-        # Scale dimensions by 16 for consistency with original implementation
         self.embedding_dim = embedding_dim * self.mult
         self.hidden_dim = hidden_dim * self.mult
-
-        # Input embedding: project each node's adjacency row to embedding_dim
-        self.input_embed = nn.Linear(self.input_dim, self.embedding_dim)
+        self.row_input_embed = nn.Linear(self.input_dim, self.embedding_dim)
         # If embedding_dim != hidden_dim, project embeddings to hidden_dim for the transformer
         self.enc_input_proj = None
         if self.embedding_dim != self.hidden_dim:
@@ -35,7 +34,6 @@ class TransformerNetwork(nn.Module):
         self.decoder_start = nn.Parameter(torch.FloatTensor(self.hidden_dim))
         # Learnable vector for EOS token in pointer distributions
         self.enc_eos = nn.Parameter(torch.FloatTensor(self.hidden_dim))
-        # Initialize parameters
         nn.init.uniform_(self.decoder_start, -0.1, 0.1)
         nn.init.uniform_(self.enc_eos, -0.1, 0.1)
 
@@ -57,12 +55,11 @@ class TransformerNetwork(nn.Module):
         device = adj_matrix.device
         batch_size, n, _ = adj_matrix.shape  # n = number of nodes
         # 1. **Encoder**: Embed each node's adjacency row and apply Transformer encoder
-        node_embeds = self.input_embed(adj_matrix)           # shape: (batch, n, embedding_dim)
+        node_embeds = self.row_input_embed(adj_matrix)           # shape: (batch, n, embedding_dim)
         if self.enc_input_proj is not None:
             enc_input = self.enc_input_proj(node_embeds)     # project to hidden_dim
         else:
             enc_input = node_embeds                         # shape: (batch, n, hidden_dim)
-        # Apply Transformer encoder (self-attention layers)
         enc_outputs = self.encoder(enc_input)                # shape: (batch, n, hidden_dim)
         # Append the learnable EOS embedding to encoder outputs for pointer attention
         eos_enc = self.enc_eos.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, self.hidden_dim)
