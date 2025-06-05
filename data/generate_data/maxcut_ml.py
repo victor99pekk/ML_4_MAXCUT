@@ -20,19 +20,20 @@ def bqp_to_maxcut(Q: np.ndarray, c: np.ndarray):
     W = (W > 0).astype(np.int8)
     return W
 
-# 3.  One sample  (label still ±1 → you can convert to 0/1 later)
+# 3.  One sample  (label is ±1, no conversion to 0/1)
 def sample_maxcut_instance(n, rng=np.random.default_rng()):
     Q, c, _, x_opt = generate_bqp(n, rng=rng)
     W = bqp_to_maxcut(Q, c)
-    y = ((x_opt + 1) // 2).astype(np.int8)
+    y = x_opt.astype(np.int8)  # Keep as ±1
     cut = cut_value(W, y)
+
     return W, y, cut
 
 def cut_value(W, y):
     """
     Compute the value of the cut defined by y on adjacency matrix W.
     W: (n, n) adjacency matrix (0/1 or weighted)
-    y: (n,) array of 0/1 labels (partition assignment)
+    y: (n,) array of ±1 labels (partition assignment)
     Returns: total cut value (int)
     """
     n = W.shape[0]
@@ -40,9 +41,8 @@ def cut_value(W, y):
     for i in range(n):
         for j in range(i+1, n):
             if y[i] != y[j]:
-                value += W[i, j]
+                value += W[i, j] if W[i, j] == 1 else -1
     return value
-
 
 # 4.  Build a CSV dataset identical to your other generator
 def make_dataset(num_graphs, n, out_csv, seed=0):
@@ -58,12 +58,12 @@ def make_dataset(num_graphs, n, out_csv, seed=0):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Generate Max-Cut data')
-    parser.add_argument('--nbr_nodes')
-    parser.add_argument('--datatype')
-    datatype = parser.parse_args().datatype
-    if datatype == None:
-      datatype = "train"
-    N_NODES = int(parser.parse_args().nbr_nodes)   
+    parser.add_argument('--nbr_nodes', required=True, type=int)
+    parser.add_argument('--datatype', default="train")
+    args = parser.parse_args()
+
+    datatype = args.datatype
+    N_NODES = args.nbr_nodes 
     if datatype == 'train':
         if N_NODES == 5:
             NUM_GRAPHS = 200_000
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     elif datatype == 'test':
         NUM_GRAPHS = 1000
     else:
-        NUM_GRAPHS = int(1)
+        NUM_GRAPHS = int(3)
 
     OUT_CSV     = f"data/{datatype}_n={N_NODES}.csv"
     make_dataset(NUM_GRAPHS, N_NODES, OUT_CSV)
