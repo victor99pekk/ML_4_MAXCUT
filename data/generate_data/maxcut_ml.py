@@ -40,8 +40,8 @@ def make_dataset(num_graphs, n, out_csv, seed=0):
     print(f"Saved {num_graphs} graphs to '{out_csv}' (row length = {n*n + n})")
 
 if __name__ == "__main__":
-    N_NODES     = 100
-    NUM_GRAPHS  = 4 * 10**4  # Number of graphs to generate
-    dataype     = "train"  # or "test"
+    N_NODES     = 3
+    NUM_GRAPHS  = 1#4 * 10**4  # Number of graphs to generate
+    dataype     = "g"  # or "test"
     OUT_CSV     = f"data/{dataype}_n={N_NODES}.csv"
     make_dataset(NUM_GRAPHS, N_NODES, OUT_CSV)
