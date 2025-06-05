@@ -17,20 +17,19 @@ from networks.TransformerPointer import *
 import argparse
 
 
-def load_dataset(filename, test=False):
+def load_dataset(filename):
     # Each row has n*n adjacency entries (0/1) + n solution entries (0/1)
     data = np.loadtxt(filename, delimiter=",", dtype=int)
     num_samples, total_dim = data.shape
+    total_dim -= 1  # Exclude last column for test set
     # Solve n^2 + n = total_dim for n
     n = int((-1 + math.sqrt(1 + 4 * total_dim)) / 2)
     assert n*n + n == total_dim, f"Bad format: {total_dim} != n^2+n"
     # First n*n cols → adjacency, next n cols → solution
     X = data[:, :n*n].reshape(num_samples, n, n).astype(np.float32)
-    Y = data[:, n*n:].astype(int)
-    if test:
-        mc = data[:, n*n:].sum(axis=1)  # Max-Cut value for each sample
-        return X, Y, n, mc
-    return X, Y, n
+    Y = data[:, n*n:-1].astype(int)
+    mc = data[:, (n*n+n):].sum(axis=1)  # Max-Cut value for each sample
+    return X, Y, n, mc
 
 def build_target_sequences(Y, n):
     # Build list of index‐sequences: [all ones], EOS, [all zeros]
@@ -64,7 +63,7 @@ def evaluate(mc, model, X, Y, n):
             chosen = set(out_seq[:eos_pos])
             pred = np.zeros(n, dtype=int)
             pred[list(chosen)] = 1
-            cut_val = max(cut_value(pred, Y[i]), cut_value(1 - pred, Y[i]))
+            cut_val = max(cut_value(pred, X[i]), cut_value(1 - pred, X[i]))
             total_value += cut_val
         
         acc = total_value / (N_test * mc)
@@ -168,6 +167,7 @@ def training_loop_AMP_optimized(mc, model,
                 # periodic evaluation
                 if step >= thres:
                     step = 0
+                    print("hej")
                     print(f"\n\nProcessed {samples_seen} samples; remaining in epoch: {N_train - batch_idx}")
                     acc = evaluate(mc, model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
                     if acc is not None:
@@ -329,10 +329,12 @@ def main():
     # from config import n
     n = 5
     train_file    = f"data/train_n={n}.csv"
-    test_file     = f"data/test_n={n}.csv"
-    X_train, Y_train, n_train = load_dataset(train_file)
-    X_test,  Y_test,  n_test, mc  = load_dataset(test_file, True)
-    mc = mc.mean()
+    test_file     = f"data/test/test_n={n}.csv"
+    X_train, Y_train, n_train, _ = load_dataset(train_file)
+    stop = X_train.shape[1]
+    # X_train = X_train[:, :stop]  # Ensure correct shape
+    X_test,  Y_test,  n_test, mc  = load_dataset(test_file)
+    mc = mc[:100].mean()
     load = False
     model_name = "PointerNetwork"
     embedding_dim = 128
@@ -401,7 +403,7 @@ def main():
     finally:
         print("Training complete. Saving model state...")
         torch.save(model.state_dict(), f"{folder_path}/weights.pth")
-        test_acc = evaluate(model, X_test_t, Y_test, n)
+        test_acc = evaluate(mc, model, X_test_t, Y_test, n)
         dur = time.perf_counter() - run_start
         write_experiment_info_txt(
             multiplier, i, model, optimizer, batch_size, samples_seen, num_epochs, lr, n, train_file, test_file,
