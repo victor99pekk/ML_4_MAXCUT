@@ -1,2 +1,19 @@
 TEST DATA
 to get the test data unzip test.zip in this folder
+
+!unzip data/test.zip -d data/test/
+
+
+
+
+TRAIN DATA
+
+!unzip data/test.zip -d data/train/name
+
+Saved 500000 graphs to 'data/train_n=5.csv' (row length = 30)
+Saved 300000 graphs to 'data/train_n=10.csv' (row length = 110)
+Saved 300000 graphs to 'data/train_n=20.csv' (row length = 420)
+Saved 300000 graphs to 'data/train_n=30.csv' (row length = 930)
+Saved 100000 graphs to 'data/train_n=50.csv' (row length = 2550)
+Saved 80000 graphs to 'data/train_n=70.csv' (row length = 4970)
+Saved 40000 graphs to 'data/train_n=100.csv' (row length = 10100)

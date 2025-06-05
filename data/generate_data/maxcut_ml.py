@@ -41,7 +41,7 @@ def make_dataset(num_graphs, n, out_csv, seed=0):
 
 if __name__ == "__main__":
     N_NODES     = 100
-    NUM_GRAPHS  = 1000  # Number of graphs to generate
-    dataype     = "test"  # or "test"
-    OUT_CSV     = f"data/test/{dataype}_n={N_NODES}.csv"
+    NUM_GRAPHS  = 4 * 10**4  # Number of graphs to generate
+    dataype     = "train"  # or "test"
+    OUT_CSV     = f"data/{dataype}_n={N_NODES}.csv"
     make_dataset(NUM_GRAPHS, N_NODES, OUT_CSV)
