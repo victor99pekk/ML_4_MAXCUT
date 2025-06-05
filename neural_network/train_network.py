@@ -18,9 +18,12 @@ import argparse
 
 
 def load_dataset(filename):
-    # Each row has n*n adjacency entries (0/1) + n solution entries (0/1)
+    # Each row has n*n adjacency entries (0/1) + n solution entries (0/1) + lastly max-cut value
     data = np.loadtxt(filename, delimiter=",", dtype=int)
-    num_samples, total_dim = data.shape
+    if len(data.shape) == 1:
+        num_samples, total_dim = 1, data.shape[0]
+    else:
+        num_samples, total_dim = data.shape
     total_dim -= 1  # Exclude last column for test set
     # Solve n^2 + n = total_dim for n
     n = int((-1 + math.sqrt(1 + 4 * total_dim)) / 2)
@@ -28,7 +31,7 @@ def load_dataset(filename):
     # First n*n cols → adjacency, next n cols → solution
     X = data[:, :n*n].reshape(num_samples, n, n).astype(np.float32)
     Y = data[:, n*n:-1].astype(int)
-    mc = data[:, (n*n+n):].sum(axis=1)  # Max-Cut value for each sample
+    mc = data[:, -1] # Max-Cut value for each sample
     return X, Y, n, mc
 
 def build_target_sequences(Y, n):
@@ -47,16 +50,14 @@ def cut_value(output, matrix):
     value = 0
     for i in range(n):
         for j in range(i+1, n):
-            if i != j and output[i] != output[j]:
-                value += matrix[i, j]
+            if output[i] != output[j]:
+                value += matrix[i, j] if matrix[i, j] == 1 else -1
     return value
 
 def evaluate(mc, model, X, Y, n):
     model.eval()
     with torch.no_grad():
-        N_test = X.size(0)
         total_value = 0
-        correct = 0
         outputs = model(X)
         for i, out_seq in enumerate(outputs):
             eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
@@ -66,8 +67,8 @@ def evaluate(mc, model, X, Y, n):
             cut_val = cut_value(pred, X[i])
             total_value += cut_val
         
-        acc = total_value / (N_test * mc)
-        print(f"\ncut / optimal: {total_value}/{N_test * mc} = {acc:.2f}")
+        acc = total_value / (mc)
+        print(f"\ncut / optimal: {total_value}/{mc} = {acc:.2f}")
     model.train()
     return acc
 
@@ -134,7 +135,8 @@ def training_loop_AMP_optimized(mc, model,
     else:
         thres = 5000 if model.name == "LSTM-PointerNetwork" else 5000
         test_precision = 100
-
+    mc = mc[:test_precision].mean()
+    mc *= test_precision  # Scale the max-cut value by the number of training samples
     try:
         for epoch in range(1, num_epochs + 1):
             model.train()
@@ -333,16 +335,15 @@ def main():
     stop = X_train.shape[1]
     # X_train = X_train[:, :stop]  # Ensure correct shape
     X_test,  Y_test,  n_test, mc  = load_dataset(test_file)
-    mc = mc[:100].mean()
     load = False
     model_name = "PointerNetwork"
     model_name = "TransformerNetwork"
     embedding_dim = 128
     hidden_dim    = 256
-    batch_size    = 40
+    batch_size    = 20
     num_epochs    = 1 * 10**2
     lr            = 0.1
-    multiplier = 2
+    multiplier = 1
     path = None
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
     base_name = "neural_network/experiments/nbr_"
