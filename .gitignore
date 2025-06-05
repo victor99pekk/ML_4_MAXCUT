@@ -5,3 +5,5 @@ neural_network/experiments/*.pth
 report/*
 
 data/test/
+
+neural_network/test.py
