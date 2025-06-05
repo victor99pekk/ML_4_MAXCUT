@@ -46,7 +46,7 @@ def cut_value(output, matrix):
     n = matrix.shape[0]
     value = 0
     for i in range(n):
-        for j in range(n):
+        for j in range(i+1, n):
             if i != j and output[i] != output[j]:
                 value += matrix[i, j]
     return value
