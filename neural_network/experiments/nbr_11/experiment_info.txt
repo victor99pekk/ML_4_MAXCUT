@@ -1,0 +1,30 @@
+========== Experiment 11 Information ==========
+
+
+Network Name: LSTM-PointerNetwork
+Train cross-entropy loss: 1.26
+Test Accuracy: 0.00%
+Run Duration: 24.73 seconds
+Samples seen: 400
+
+embedding_dim: 2048
+multiplier: 2
+hidden_dim: 4096
+
+Optimizer: SGD
+Learning Rate: 0.1
+Batch Size: 40
+Epochs: 100
+Input Dimension (n): 5
+
+Train File: data/train_n=5.csv
+Test File: data/test/test_n=5.csv
+Device: cpu
+Number of Parameters: 201410560
+
+Network Architecture:
+PointerNetwork(
+  (input_embed): Linear(in_features=5, out_features=2048, bias=True)
+  (encoder_lstm): LSTM(2048, 4096, batch_first=True)
+  (decoder_lstm): LSTM(2048, 4096, batch_first=True)
+)
