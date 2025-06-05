@@ -3,6 +3,7 @@
 # This script trains a arbitray pytorch network to solve the Max-Cut problem on graphs.
 # It loads graph data, trains the model, and evaluates its performance.
 
+import csv
 import math
 import os
 import time
@@ -280,6 +281,12 @@ def write_experiment_info_txt(
         # f.write("============================================\n")
     print(f"Experiment info written to {out_file}")   
 
+def save_list_to_csv(data_list, filename):
+    with open(filename, "w", newline="") as f:
+        writer = csv.writer(f)
+        for val in data_list:
+            writer.writerow([val])
+
 def main():
     # from config import n
     n = 5
@@ -365,6 +372,12 @@ def main():
         test_plot_file = f"{folder_path}/test_acc={n}.png"
         plot_test_acc(test_accs, model.name, n, test_plot_file)
         plot_train_loss(train_losses, model.name, n, train_plot_file)
+
+        # --- Save accuracy and loss lists to CSV files ---
+        acc_csv_file = f"{folder_path}/test_accuracies.csv"
+        loss_csv_file = f"{folder_path}/train_losses.csv"
+        save_list_to_csv(test_accs, acc_csv_file)
+        save_list_to_csv(train_losses, loss_csv_file)
     
 
 
