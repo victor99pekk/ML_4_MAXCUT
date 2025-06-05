@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class TransformerPointerNetwork(nn.Module):
+class TransformerNetwork(nn.Module):
     """Fully Transformer-based Pointer Network for Max-Cut.
     Encodes the input graph with self-attention and uses a Transformer decoder 
     to produce a pointer distribution over input nodes at each step."""
@@ -17,8 +17,8 @@ class TransformerPointerNetwork(nn.Module):
             num_encoder_layers: Number of transformer encoder layers.
             num_decoder_layers: Number of transformer decoder layers.
         """
-        super(TransformerPointerNetwork, self).__init__()
-        self.name = "Transformer-PointerNetwork"
+        super(TransformerNetwork, self).__init__()
+        self.name = "TransformerNetwork"
         self.mult = 1
         self.input_dim = input_dim
         # Scale dimensions by 16 for consistency with original implementation

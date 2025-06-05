@@ -201,14 +201,17 @@ def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size,
 
 import os
 
-def plot_train_loss(train_losses, model_name, n, plot_path):
+def plot_train_loss(train_losses, model_name, n, folder_path):
     import numpy as np
-    def downsample_to_n_points(data, n_points=50):
-        data = np.array(data)
-        if len(data) <= n_points:
-            return data
-        bins = np.array_split(data, n_points)
-        return np.array([b.mean() for b in bins])
+    plot_path = folder_path + "/train_loss_plot.png"
+    loss_path = folder_path + "/train_loss.csv"
+    save_list_to_csv(train_losses, loss_path)
+    # def downsample_to_n_points(data, n_points=50):
+    #     data = np.array(data)
+    #     if len(data) <= n_points:
+    #         return data
+    #     bins = np.array_split(data, n_points)
+    #     return np.array([b.mean() for b in bins])
 
     plt.figure(figsize=(10, 5))
     plot_data = downsample_to_n_points(train_losses, 50)
@@ -230,7 +233,10 @@ def downsample_to_n_points(data, n_points=150):
     bins = np.array_split(data, n_points)
     return np.array([b.mean() for b in bins])
 
-def plot_test_acc(test_accuracies, model_name, n, plot_path):
+def plot_test_acc(test_accuracies, model_name, n, folder_path):
+    plot_path = folder_path + "/testacc_plot.png"
+    csvPath = folder_path + "/testacc.csv"
+    save_list_to_csv(test_accuracies, csvPath)
     plt.figure(figsize=(10, 5))
     plot_data = downsample_to_n_points(test_accuracies, 50)
     plt.plot(plot_data, label="Test Accuracy")
@@ -370,14 +376,12 @@ def main():
             weights_path=weights_path
         )
         test_plot_file = f"{folder_path}/test_acc={n}.png"
-        plot_test_acc(test_accs, model.name, n, test_plot_file)
-        plot_train_loss(train_losses, model.name, n, train_plot_file)
-
         # --- Save accuracy and loss lists to CSV files ---
-        acc_csv_file = f"{folder_path}/test_accuracies.csv"
-        loss_csv_file = f"{folder_path}/train_losses.csv"
-        save_list_to_csv(test_accs, acc_csv_file)
-        save_list_to_csv(train_losses, loss_csv_file)
+        # acc_csv_file = f"{folder_path}/test_accuracies.csv"
+        # loss_csv_file = f"{folder_path}/train_losses.csv"
+        plot_test_acc(test_accs, model.name, n, folder_path)
+        plot_train_loss(train_losses, model.name, n, folder_path)
+        
     
 
 

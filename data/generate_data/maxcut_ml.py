@@ -40,8 +40,24 @@ def make_dataset(num_graphs, n, out_csv, seed=0):
     print(f"Saved {num_graphs} graphs to '{out_csv}' (row length = {n*n + n})")
 
 if __name__ == "__main__":
-    N_NODES     = 3
-    NUM_GRAPHS  = 1#4 * 10**4  # Number of graphs to generate
-    dataype     = "g"  # or "test"
+    import argparse
+    argparse.ArgumentParser('--nbr_nodes', required=True)
+    dataype = argparse.ArgumentParser('--type', default='train')
+    N_NODES = int(argparse.parse_args().nbr_nodes)
+    if N_NODES == 5:
+        NUM_GRAPHS = 500_000
+    elif N_NODES == 10:
+        NUM_GRAPHS = 300_000
+    elif N_NODES == 20:
+        NUM_GRAPHS = 300_000
+    elif N_NODES == 30:
+        NUM_GRAPHS = 300_000
+    elif N_NODES == 50:
+        NUM_GRAPHS = 100_000
+    elif N_NODES == 70:
+        NUM_GRAPHS = 80_000
+    elif N_NODES == 100:
+        NUM_GRAPHS = 40_000
+
     OUT_CSV     = f"data/{dataype}_n={N_NODES}.csv"
     make_dataset(NUM_GRAPHS, N_NODES, OUT_CSV)
