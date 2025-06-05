@@ -41,14 +41,14 @@ def build_target_sequences(Y, n):
         seqs.append(set1 + [eos] + set0)
     return seqs
 
-def cut_value(output, y):
+def cut_value(output, matrix):
 
-    n = y.shape[0]
+    n = matrix.shape[0]
     value = 0
     for i in range(n):
         for j in range(n):
             if i != j and output[i] != output[j]:
-                value += output[i] * output[j] * y[i, j]
+                value += matrix[i, j]
     return value
 
 def evaluate(mc, model, X, Y, n):
@@ -63,7 +63,7 @@ def evaluate(mc, model, X, Y, n):
             chosen = set(out_seq[:eos_pos])
             pred = np.zeros(n, dtype=int)
             pred[list(chosen)] = 1
-            cut_val = max(cut_value(pred, X[i]), cut_value(1 - pred, X[i]))
+            cut_val = cut_value(pred, X[i])
             total_value += cut_val
         
         acc = total_value / (N_test * mc)
@@ -167,7 +167,6 @@ def training_loop_AMP_optimized(mc, model,
                 # periodic evaluation
                 if step >= thres:
                     step = 0
-                    print("hej")
                     print(f"\n\nProcessed {samples_seen} samples; remaining in epoch: {N_train - batch_idx}")
                     acc = evaluate(mc, model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
                     if acc is not None:
@@ -337,6 +336,7 @@ def main():
     mc = mc[:100].mean()
     load = False
     model_name = "PointerNetwork"
+    model_name = "TransformerNetwork"
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 40
@@ -376,8 +376,8 @@ def main():
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
                             multiplier=multiplier).to(device)
-    elif model_name == "TransformerPointer":
-        model = TransformerPointerNetwork(input_dim=n,
+    elif model_name == "TransformerNetwork":
+        model = TransformerNetwork(input_dim=n,
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
                             multiplier=multiplier).to(device)
