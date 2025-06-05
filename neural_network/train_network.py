@@ -17,7 +17,7 @@ from networks.TransformerPointer import *
 import argparse
 
 
-def load_dataset(filename):
+def load_dataset(filename, test=False):
     # Each row has n*n adjacency entries (0/1) + n solution entries (0/1)
     data = np.loadtxt(filename, delimiter=",", dtype=int)
     num_samples, total_dim = data.shape
@@ -27,6 +27,9 @@ def load_dataset(filename):
     # First n*n cols → adjacency, next n cols → solution
     X = data[:, :n*n].reshape(num_samples, n, n).astype(np.float32)
     Y = data[:, n*n:].astype(int)
+    if test:
+        mc = data[:, n*n:].sum(axis=1)  # Max-Cut value for each sample
+        return X, Y, n, mc
     return X, Y, n
 
 def build_target_sequences(Y, n):
@@ -39,25 +42,54 @@ def build_target_sequences(Y, n):
         seqs.append(set1 + [eos] + set0)
     return seqs
 
+def cut_value(output, y):
 
-def evaluate(model, X, Y, n):
+    n = y.shape[0]
+    value = 0
+    for i in range(n):
+        for j in range(n):
+            if i != j and output[i] != output[j]:
+                value += output[i] * output[j] * y[i, j]
+    return value
+
+def evaluate(mc, model, X, Y, n):
     model.eval()
     with torch.no_grad():
         N_test = X.size(0)
+        total_value = 0
         correct = 0
-        outputs = model(X)  # Pass the whole batch at once
+        outputs = model(X)
         for i, out_seq in enumerate(outputs):
             eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
             chosen = set(out_seq[:eos_pos])
             pred = np.zeros(n, dtype=int)
             pred[list(chosen)] = 1
-            target = Y[i]
-            if np.array_equal(pred, target) or np.array_equal(1 - pred, target):
-                correct += 1
-        accuracy = correct / N_test
-        print(f"\nTest Accuracy: {correct}/{N_test} = {accuracy:.2f}")
+            cut_val = max(cut_value(pred, Y[i]), cut_value(1 - pred, Y[i]))
+            total_value += cut_val
+        
+        acc = total_value / (N_test * mc)
+        print(f"\ncut / optimal: {total_value}/{N_test * mc} = {acc:.2f}")
     model.train()
-    return accuracy
+    return acc
+
+# def evaluate(model, X, Y, n, mc):
+#     model.eval()
+#     with torch.no_grad():
+#         N_test = X.size(0)
+#         correct = 0
+#         outputs = model(X)  # Pass the whole batch at once
+#         for i, out_seq in enumerate(outputs):
+#             eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
+#             chosen = set(out_seq[:eos_pos])
+#             pred = np.zeros(n, dtype=int)
+#             pred[list(chosen)] = 1
+#             target = Y[i]
+#             if np.array_equal(pred, target) or np.array_equal(1 - pred, target):
+#                 correct += 1
+#         accuracy = correct / N_test
+#         print(f"\nTest Accuracy: {correct}/{N_test} = {accuracy:.2f}")
+#     model.train()
+#     return accuracy
 
 
 
@@ -70,7 +102,7 @@ import matplotlib.pyplot as plt
 import torch
 from torch.cuda.amp import autocast, GradScaler
 
-def training_loop_AMP_optimized(model,
+def training_loop_AMP_optimized(mc, model,
                   optimizer,
                   X_train_t,
                   Y_train,
@@ -137,7 +169,7 @@ def training_loop_AMP_optimized(model,
                 if step >= thres:
                     step = 0
                     print(f"\n\nProcessed {samples_seen} samples; remaining in epoch: {N_train - batch_idx}")
-                    acc = evaluate(model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
+                    acc = evaluate(mc, model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
                     if acc is not None:
                         test_accuracies.append(acc)
                     train_losses.append(loss_batch.item())
@@ -296,10 +328,11 @@ def save_list_to_csv(data_list, filename):
 def main():
     # from config import n
     n = 5
-    train_file    = f"data/maxcut/train_n={n}.csv"
-    test_file     = f"data/maxcut/test_n={n}.csv"
+    train_file    = f"data/train_n={n}.csv"
+    test_file     = f"data/test_n={n}.csv"
     X_train, Y_train, n_train = load_dataset(train_file)
-    X_test,  Y_test,  n_test  = load_dataset(test_file)
+    X_test,  Y_test,  n_test, mc  = load_dataset(test_file, True)
+    mc = mc.mean()
     load = False
     model_name = "PointerNetwork"
     embedding_dim = 128
@@ -358,7 +391,7 @@ def main():
         test_plot_file = None
         run_start = time.perf_counter()
         samples_seen = training_loop_AMP_optimized(
-            model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
+            mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
             train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
         )
     except KeyboardInterrupt:
