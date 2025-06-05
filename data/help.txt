@@ -10,6 +10,8 @@ TRAIN DATA
 
 !unzip data/test.zip -d data/train/name
 
+generate training data:
+
 Saved 500000 graphs to 'data/train_n=5.csv' (row length = 30)
 Saved 300000 graphs to 'data/train_n=10.csv' (row length = 110)
 Saved 300000 graphs to 'data/train_n=20.csv' (row length = 420)
