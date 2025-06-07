@@ -18,29 +18,25 @@ import argparse
 
 
 def load_dataset(filename):
-    # Each row has n*n adjacency entries (0/1) + n solution entries (0/1) + lastly max-cut value
+    import math
     data = np.loadtxt(filename, delimiter=",", dtype=int)
     if len(data.shape) == 1:
         num_samples, total_dim = 1, data.shape[0]
     else:
         num_samples, total_dim = data.shape
-    total_dim -= 1  # Exclude last column for test set
-    # Solve n^2 + n = total_dim for n
-    n = int((-1 + math.sqrt(1 + 4 * total_dim)) / 2)
-    assert n*n + n == total_dim, f"Bad format: {total_dim} != n^2+n"
-    # First n*n cols → adjacency, next n cols → solution
+    n = int((-1 + math.sqrt(1 + 4 * (total_dim - 1))) / 2)
+    assert n*n + n + 1 == total_dim, f"Bad format: {total_dim} != n^2+n+1"
     X = data[:, :n*n].reshape(num_samples, n, n).astype(np.float32)
-    Y = data[:, n*n:-1].astype(int)
-    mc = data[:, -1] # Max-Cut value for each sample
+    Y = data[:, n*n:n*n+n].astype(int)  # This can be ±1 or 0/1
+    mc = data[:, -1]
     return X, Y, n, mc
 
 def build_target_sequences(Y, n):
-    # Build list of index‐sequences: [all ones], EOS, [all zeros]
     eos = n
     seqs = []
     for sol in Y:
         set1 = sorted(i for i, v in enumerate(sol) if v == 1)
-        set0 = sorted(i for i, v in enumerate(sol) if v == 0)
+        set0 = sorted(i for i, v in enumerate(sol) if v == -1)
         seqs.append(set1 + [eos] + set0)
     return seqs
 
@@ -51,7 +47,7 @@ def cut_value(output, matrix):
     for i in range(n):
         for j in range(i+1, n):
             if output[i] != output[j]:
-                value += matrix[i, j] if matrix[i, j] == 1 else -1
+                value += matrix[i, j]
     return value
 
 def evaluate(mc, model, X, Y, n):
