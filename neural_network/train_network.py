@@ -11,9 +11,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 # from neural_network.networks.PointerNet import PointerNetwork
-from networks.PointerNet import *
-from networks.HybridPointer import *
-from networks.TransformerPointer import *
+from models.PointerNet import *
+from models.TransformerPointer import *
 import argparse
 
 
@@ -365,11 +364,6 @@ def main():
     train_losses = []
     if model_name == "PointerNetwork":
         model = PointerNetwork(input_dim=n,
-                            embedding_dim=embedding_dim,
-                            hidden_dim=hidden_dim,
-                            multiplier=multiplier).to(device)
-    elif model_name == "HybridPointer":
-        model = HybridPointerNetwork(input_dim=n,
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
                             multiplier=multiplier).to(device)
