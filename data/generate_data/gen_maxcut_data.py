@@ -52,7 +52,7 @@ def make_dataset(num_graphs, n, out_csv, seed=0):
     with open(out_csv, "w") as f:
         for _ in range(num_graphs):
             W, y, cut = sample_maxcut_instance(n, rng)
-            row = np.concatenate([W.ravel(), y, [cut]])
+            row = np.concatenate([W.ravel(), (y == 1).astype(int), [cut]])
             f.write(",".join(map(str, row)) + "\n")
 
     print(f"Saved {num_graphs} graphs to '{out_csv}' "
