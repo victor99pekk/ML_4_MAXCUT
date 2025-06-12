@@ -1,4 +1,8 @@
-TEST DATA
+SEED
+all the data was generated with gen_maxcut_data.py with the 0 seed for reproducability
+
+
+EST DATA
 to get the test data unzip test.zip in this folder. remove the ! if your not using notebook
 
 !unzip data/test.zip -d data/test/
