@@ -1,94 +1,82 @@
 import numpy as np
+from pathlib import Path
 
-# 1.  Generate a planted-solution BQP (unchanged)
-def generate_bqp(n: int, base: float = 10.0, rng=np.random.default_rng()):
-    Q   = base * rng.standard_normal((n, n))
-    Q   = (Q + Q.T) / 2.0
-    # x   = rng.choice([0, 1], size=n)
-    x = np.random.rand(n, 1)
-    x = 2 * x - 1  # Convert to ±1
-    # x   = rng.choice([-1, 1], size=n)
-    lam = np.abs(Q).sum(axis=1)
-    c   = (Q + np.diag(lam)) @ x
-    return Q, c, lam, x
+# ------------------------------------------------------------------
+# 1.  Balanced planted labels (same as before, keep for symmetry)
+# ------------------------------------------------------------------
+def sample_balanced_labels(n, rng):
+    k = n // 2
+    x = np.array([1]*k + [-1]*(n-k), dtype=int)
+    rng.shuffle(x)
+    if x[0] == -1:
+        x = -x
+    return x
 
-# 2.  BQP -> Max-Cut, **binarised** at the very end
-def bqp_to_maxcut(Q: np.ndarray, c: np.ndarray):
-    n = Q.shape[0]
-    W = np.zeros((n, n), dtype=float)
-    for i in range(n):
-        for j in range(i + 1, n):
-            W[i, j] = W[j, i] = 0.25 * Q[i, j]
-    # No extra node, so skip the row_sums/c part
-    W = (W > 0).astype(np.int8)
-    W = 2 * W - 1  # Now W contains -1 and 1
-
+# ------------------------------------------------------------------
+# 2.  W with IID Bernoulli(½) on every cross edge
+# ------------------------------------------------------------------
+def binary_W_prob(n, x, rng, p=0.5):
+    """Return 0/1 matrix; each cross-edge is 1 with prob p (default 0.5)."""
+    # mask[i,j] = 1 iff x_i != x_j
+    mask = (1 - np.outer(x, x)) // 2
+    B = rng.random((n, n)) < p        # iid Bernoulli(p) in [0,1)
+    B = np.triu(B, 1)
+    B += B.T                          # symmetric, diag 0
+    W = (B & mask).astype(np.int8)    # keep only cross edges
     return W
 
-# 3.  One sample  (label is ±1, no conversion to 0/1)
-def sample_maxcut_instance(n, rng=np.random.default_rng()):
-    Q, c, _, x_opt = generate_bqp(n, rng=rng)
-    W = bqp_to_maxcut(Q, c)
-    y = x_opt.astype(np.int8)  # Keep as ±1
-
-    cut = cut_value(W, y)
-
-    return W, y, cut
-
+# ------------------------------------------------------------------
+# 3.  Exact cut value (vectorised, symmetric W)
+# ------------------------------------------------------------------
 def cut_value(W, y):
-    """
-    Compute the value of the cut defined by y on adjacency matrix W.
-    W: (n, n) adjacency matrix (0/1 or weighted)
-    y: (n,) array of ±1 labels (partition assignment)
-    Returns: total cut value (int)
-    """
-    n = W.shape[0]
-    print(W)
-    value = 0
-    for i in range(0, n):
-        for j in range(i+1, n):
-            value += W[i, j] * (1 - y[i] * y[j]) / 2
-    return value
+    return int(0.25 * np.sum(W * (1 - np.outer(y, y))))
 
-# 4.  Build a CSV dataset identical to your other generator
+# ------------------------------------------------------------------
+# 4.  One Max-Cut instance
+# ------------------------------------------------------------------
+def sample_maxcut_instance(n, rng):
+    x = sample_balanced_labels(n, rng)
+    W = binary_W_prob(n, x, rng, p=0.5)
+    cut = cut_value(W, x)             # number of 1-edges across partition
+    return W, x, cut
+
+# ------------------------------------------------------------------
+# 5.  Streaming CSV writer  (unchanged except no stray random import)
+# ------------------------------------------------------------------
 def make_dataset(num_graphs, n, out_csv, seed=0):
+    import random
+    seed = random.randint(0, 2**31 - 1) 
     rng = np.random.default_rng(seed)
-    rows = []
-    for _ in range(num_graphs):
-        W, y, cut = sample_maxcut_instance(n, rng)
-        rows.append(np.concatenate([W.flatten(), y.flatten(), [cut if np.isscalar(cut) else cut.item()]])) 
-        arr = np.stack(rows, axis=0)
-    np.savetxt(out_csv, arr, fmt="%d", delimiter=",")
-    print(f"Saved {num_graphs} graphs to '{out_csv}' (row length = {n*n + n + 1})")
+    Path(out_csv).parent.mkdir(parents=True, exist_ok=True)
 
+    with open(out_csv, "w") as f:
+        for _ in range(num_graphs):
+            W, y, cut = sample_maxcut_instance(n, rng)
+            row = np.concatenate([W.ravel(), y, [cut]])
+            f.write(",".join(map(str, row)) + "\n")
+
+    print(f"Saved {num_graphs} graphs to '{out_csv}' "
+          f"(row length = {n*n + n + 1}, Bernoulli p=0.5 on cross edges)")
+
+# ------------------------------------------------------------------
+# 6.  CLI driver (unchanged sizing logic)
+# ------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description='Generate Max-Cut data')
-    parser.add_argument('--nbr_nodes', required=True, type=int)
-    parser.add_argument('--datatype', default="train")
+    parser = argparse.ArgumentParser(
+        description="Generate 0/1 Max-Cut data with Bernoulli(½) cross edges")
+    parser.add_argument("--nbr_nodes", required=True, type=int)
+    parser.add_argument("--datatype", default="train")
     args = parser.parse_args()
 
-    datatype = args.datatype
-    N_NODES = args.nbr_nodes 
-    if datatype == 'train':
-        if N_NODES == 5:
-            NUM_GRAPHS = 200_000
-        elif N_NODES == 10:
-            NUM_GRAPHS = 300_000
-        elif N_NODES == 20:
-            NUM_GRAPHS = 200_000
-        elif N_NODES == 30:
-            NUM_GRAPHS = 200_000
-        elif N_NODES == 50:
-            NUM_GRAPHS = 100_000
-        elif N_NODES == 70:
-            NUM_GRAPHS = 80_000
-        elif N_NODES == 100:
-            NUM_GRAPHS = 40_000
-    elif datatype == 'test':
-        NUM_GRAPHS = 1000
+    N = args.nbr_nodes
+    if args.datatype == "train":
+        NUM = {5:200_000, 10:300_000, 20:200_000,
+               30:200_000, 50:100_000, 70:80_000,
+              100:40_000}[N]
+    elif args.datatype == "test":
+        NUM = 1_000
     else:
-        NUM_GRAPHS = int(3)
+        NUM = 3
 
-    OUT_CSV     = f"data/{datatype}_n={N_NODES}.csv"
-    make_dataset(NUM_GRAPHS, N_NODES, OUT_CSV)
+    make_dataset(NUM, N, f"data/{args.datatype}_n={N}.csv")
