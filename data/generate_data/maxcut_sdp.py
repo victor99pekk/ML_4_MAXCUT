@@ -1,46 +1,106 @@
+import argparse
 import numpy as np
+import csv
+import itertools
 
-# 1.  Generate a planted-solution BQP (unchanged)
-def generate_bqp(n: int, base: float = 10.0, rng=np.random.default_rng()):
-    Q   = base * rng.standard_normal((n, n))
-    Q   = (Q + Q.T) / 2.0
-    x   = rng.choice([-1, 1], size=n)
-    lam = np.abs(Q).sum(axis=1)
-    c   = (Q + np.diag(lam)) @ x
-    return Q, c, lam, x
-
-
-def bqp_to_maxcut_sdp(Q: np.ndarray, c: np.ndarray):
-    n = Q.shape[0]
-    W = np.zeros((n + 1, n + 1), dtype=float)
-    for i in range(n):
-        for j in range(i + 1, n):
-            W[i + 1, j + 1] = W[j + 1, i + 1] = 0.25 * Q[i, j]
-    row_sums = Q.sum(axis=1) - np.diag(Q)
-    for j in range(n):
-        W[0, j + 1] = W[j + 1, 0] = 0.25 * row_sums[j] + 0.5 * c[j]
-    W = (W > 0).astype(np.int8)
-    return W
-
-
-def sample_maxcut_instance_sdp(n, rng=np.random.default_rng()):
-    Q, c, _, x_opt = generate_bqp(n, rng=rng)
-    W = bqp_to_maxcut_sdp(Q, c)
-    y = np.concatenate(([1], ((x_opt + 1) // 2).astype(np.int8)))  # Leading 1 for extra node
-    return W, y
-
-def make_dataset_sdp(num_graphs, n, out_csv, seed=0):
-    rng = np.random.default_rng(seed)
+def make_dataset(num_graphs, n_nodes, out_csv):
+    np.random.seed(0)  # for reproducibility
     rows = []
-    for _ in range(num_graphs):
-        W, y = sample_maxcut_instance_sdp(n, rng)
-        rows.append(np.concatenate([W.flatten(), y]))
-    arr = np.stack(rows, axis=0)
-    np.savetxt(out_csv, arr, fmt="%d", delimiter=",")
-    print(f"Saved {num_graphs} graphs to '{out_csv}' (row length = {(n+1)*(n+1) + (n+1)})")
+    # Precompute all 2^(n-1) sign-vectors with first bit fixed = +1 (for brute)
+    if n_nodes <= 20:
+        bit_range = list(itertools.product([-1,1], repeat=n_nodes-1))
+    else:
+        bit_range = None
 
-if __name__ == "__main__":
-    N_NODES     = 5
-    NUM_GRAPHS  = 1000
-    OUT_CSV_SDP = f"data/test/n={N_NODES}.csv"
-    make_dataset_sdp(NUM_GRAPHS, N_NODES, OUT_CSV_SDP)
+    for _ in range(num_graphs):
+        # --- 1. Generate BQP instance as per Zhou [14]: random Q, symmetrize, random x
+        base = 10.0
+        Q = base * np.random.randn(n_nodes, n_nodes)
+        Q = (Q + Q.T) / 2
+        Q = np.round(Q)  # optional rounding to integer
+        # random x in {-1,1}^n
+        x = np.random.randint(0, 2, size=n_nodes)
+        x = 2*x - 1
+        # Compute lambda and c (not needed further for graph, but included for completeness)
+        lam = np.sum(np.abs(Q), axis=1)
+        c = (Q + np.diag(lam)) @ x
+
+        # Make sure first entry of x is +1 for consistency (global sign irrelevant)
+        if x[0] == -1:
+            x = -x
+
+        # --- 2. Build adjacency W so x is optimal partition
+        W = np.zeros((n_nodes, n_nodes))
+        for i in range(n_nodes):
+            for j in range(i+1, n_nodes):
+                W[i,j] = W[j,i] = - x[i] * x[j] * abs(Q[i,j])
+        # Diagonal set to 0
+        np.fill_diagonal(W, 0.0)
+
+        # --- 3. Solve Max-Cut optimally (brute force if n small)
+        if n_nodes <= 10:
+            best_cut = -np.inf
+            best_s = None
+            for bits in bit_range:
+                s = np.array([1] + list(bits), dtype=int)
+                # Compute cut weight: sum W[i,j] for edges with s[i]!=s[j]
+                cut = 0.0
+                for i in range(n_nodes):
+                    for j in range(i+1, n_nodes):
+                        if s[i] != s[j]:
+                            cut += W[i,j]
+                if cut > best_cut:
+                    best_cut = cut
+                    best_s = s.copy()
+            # best_s now has first bit = +1; it should equal ±x
+            sol = best_s
+            cut_val = best_cut
+        else:
+            # For larger n, use the generated x (already with x[0]=+1)
+            sol = x
+            # Compute its cut value directly
+            cut_val = 0.0
+            for i in range(n_nodes):
+                for j in range(i+1, n_nodes):
+                    if sol[i] != sol[j]:
+                        cut_val += W[i,j]
+
+        # Flatten W (row-major) and append sol and cut_val to one row
+        row = np.concatenate([W.flatten(), sol.astype(int), [int(cut_val)]])
+        rows.append(row)
+
+    # Write to CSV
+    with open(out_csv, 'w', newline='') as f:
+        writer = csv.writer(f)
+        for row in rows:
+            writer.writerow(row)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--nbr_nodes', type=int, required=True,
+                        help='Number of nodes in each graph')
+    parser.add_argument('--datatype', type=str, default='train',
+                        help='Dataset type (e.g., train or test)')
+    args = parser.parse_args()
+
+    # Decide number of graphs based on nodes and type
+    n = args.nbr_nodes
+    if args.datatype.lower() == 'train':
+        if n <= 20:
+            num_graphs = 1000
+        elif n <= 30:
+            num_graphs = 500
+        else:
+            num_graphs = 100
+    else:  # test or other
+        if n <= 20:
+            num_graphs = 100
+        else:
+            num_graphs = 20
+
+    out_csv = f"{args.datatype}_{n}.csv"
+    make_dataset(num_graphs, n, out_csv)
+    print(f"Generated {num_graphs} graphs of size {n}, output in {out_csv}")
+
+if __name__ == '__main__':
+    main()
