@@ -1,15 +1,14 @@
 TEST DATA
-to get the test data unzip test.zip in this folder
+to get the test data unzip test.zip in this folder. remove the ! if your not using notebook
 
 !unzip data/test.zip -d data/test/
 
 
 
 
+
 TRAIN DATA
-
-!unzip data/test.zip -d data/train/name
-
+I havent pushed any training data to repo since it would be too big. just generate everything with the 0 se 
 generate training data:
 
 Saved 500000 graphs to 'data/train_n=5.csv' (row length = 30)
