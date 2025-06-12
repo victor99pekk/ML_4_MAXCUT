@@ -45,7 +45,7 @@ def sample_maxcut_instance(n, rng):
 # ------------------------------------------------------------------
 def make_dataset(num_graphs, n, out_csv, seed=0):
     import random
-    seed = random.randint(0, 2**31 - 1) 
+    # seed = random.randint(0, 2**31 - 1) 
     rng = np.random.default_rng(seed)
     Path(out_csv).parent.mkdir(parents=True, exist_ok=True)
 
