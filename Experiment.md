@@ -4,7 +4,7 @@
 Link to experiment report: https://www.overleaf.com/project/683f1e355a717aa8e1eac98f
 
 ## Test Data
-We will try different different maximum cut algorithms on different sized graphs where the size ranges from 5 to 100. Every graph will be represented by an adjacency matrix where every entry will have 50% chance of being a 1, and 50% or being a 0. The graph size will take on the values $$sizes = \{5, 10, 20, 30, 50, 70, 100\}$$
+We will try different different maximum cut algorithms on different sized graphs where the size ranges from 5 to 100. Every graph will be represented by an adjacency matrix where every entry will have 25% chance of being a 1, and 25% or being a 0. The graph size will take on the values $$sizes = \{5, 10, 20, 30, 50, 70, 100\}$$
 
 There will be 1000 different graphs of each size.
 
