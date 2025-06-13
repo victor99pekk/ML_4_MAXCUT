@@ -64,39 +64,16 @@ def evaluate(mc, model, X, Y, n):
             total_value += cut_val
         # total_value = float(total_value.item())
         if isinstance(mc, np.ndarray):
-            if mc.size == 1:
-                mc_val = float(mc.item())
+            if True or mc.size == 1:
+                mc_val = float(mc.sum().item())
             else:
                 mc_val = float(np.mean(mc))
         else:
             mc_val = float(mc)
         acc = total_value / mc_val if mc_val != 0 else float('nan')
-        # acc = total_value / (mc.cpu().item())
         print(f"\ncut / optimal: {total_value}/{mc_val}  =  {acc:.2f}")
     model.train()
     return acc
-
-# def evaluate(model, X, Y, n, mc):
-#     model.eval()
-#     with torch.no_grad():
-#         N_test = X.size(0)
-#         correct = 0
-#         outputs = model(X)  # Pass the whole batch at once
-#         for i, out_seq in enumerate(outputs):
-#             eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
-#             chosen = set(out_seq[:eos_pos])
-#             pred = np.zeros(n, dtype=int)
-#             pred[list(chosen)] = 1
-#             target = Y[i]
-#             if np.array_equal(pred, target) or np.array_equal(1 - pred, target):
-#                 correct += 1
-#         accuracy = correct / N_test
-#         print(f"\nTest Accuracy: {correct}/{N_test} = {accuracy:.2f}")
-#     model.train()
-#     return accuracy
-
-
-
 
 
 
@@ -192,50 +169,6 @@ def training_loop_AMP_optimized(mc, model,
         return samples_seen
 
 
-def training_loop(model, optimizer, X_train_t, Y_train, n, batch_size, 
-                  num_epochs, train_seqs, X_test_t, Y_test, folder_path, 
-                  test_accuracies, train_losses, plot_repeat=None):
-    samples_seen = 0     # for flexible eval cadence
-    thres = 50 if model.name == "LSTM-PointerNetwork" else 500
-    try:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        N_train = X_train_t.size(0)
-        # plot_path = folder_path
-        samples_seen = 0     # for flexible eval cadence
-        step = 0
-        for epoch in range(1, num_epochs+1):
-            model.train()
-            perm = torch.randperm(N_train, device=device)
-            epoch_loss = 0.0
-            for i in range(0, N_train, batch_size):
-                samples_seen += batch_size
-                step += batch_size
-                # batch_loss = 0.0
-                idx = perm[i:i+batch_size]
-                batch_X = X_train_t[idx]
-                batch_targets = [train_seqs[j] for j in idx.cpu().tolist()]
-                optimizer.zero_grad()
-                loss = model(batch_X, target_seq=batch_targets)
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.item() * idx.size(0)
-                # Evaluate on test set every 10 epochs
-                if step >= thres:
-                    step = 0
-                    print(f"\n\n{i/1000}:   {N_train-i}")
-                    acc = evaluate(model, X_test_t[:25], Y_test[:25], n)
-                    if acc:
-                        test_accuracies.append(acc)
-                    train_losses.append(loss.item() * idx.size(0) / batch_size)
-                    if plot_repeat != None:
-                        plot_test_acc(test_accuracies, model.name, n, plot_repeat)
-            avg_loss = epoch_loss / N_train
-            # train_losses.append(avg_loss)
-            print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
-    finally:
-        return samples_seen
-
-
 
 import os
 
@@ -244,12 +177,7 @@ def plot_train_loss(train_losses, model_name, n, folder_path):
     plot_path = folder_path + "/train_loss_plot.png"
     loss_path = folder_path + "/train_loss.csv"
     save_list_to_csv(train_losses, loss_path)
-    # def downsample_to_n_points(data, n_points=50):
-    #     data = np.array(data)
-    #     if len(data) <= n_points:
-    #         return data
-    #     bins = np.array_split(data, n_points)
-    #     return np.array([b.mean() for b in bins])
+
 
     plt.figure(figsize=(10, 5))
     plot_data = downsample_to_n_points(train_losses, 50)
@@ -265,7 +193,11 @@ def plot_train_loss(train_losses, model_name, n, folder_path):
 import numpy as np
 
 def downsample_to_n_points(data, n_points=150):
-    data = np.array(data)
+    def to_float(x):
+        if isinstance(x, torch.Tensor):
+            return float(x.cpu().item())
+        return float(x)
+    data = np.array([to_float(x) for x in data])
     if len(data) <= n_points:
         return data
     bins = np.array_split(data, n_points)
