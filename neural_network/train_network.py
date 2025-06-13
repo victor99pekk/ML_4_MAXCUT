@@ -72,7 +72,7 @@ def evaluate(mc, model, X, Y, n):
             mc_val = float(mc)
         acc = total_value / mc_val if mc_val != 0 else float('nan')
         # acc = total_value / (mc.cpu().item())
-        print(f"\ncut / optimal: {acc:.2f}")
+        print(f"\ncut / optimal: {total_value}/{mc_val}  =  {acc:.2f}")
     model.train()
     return acc
 
