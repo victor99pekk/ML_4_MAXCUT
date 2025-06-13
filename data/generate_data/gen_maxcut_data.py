@@ -36,7 +36,7 @@ def cut_value(W, y):
 # ------------------------------------------------------------------
 def sample_maxcut_instance(n, rng):
     x = sample_balanced_labels(n, rng)
-    W = binary_W_prob(n, x, rng, p=0.5)
+    W = binary_W_prob(n, x, rng, p=0.71)
     cut = cut_value(W, x)             # number of 1-edges across partition
     return W, x, cut
 
@@ -71,8 +71,8 @@ if __name__ == "__main__":
 
     N = args.nbr_nodes
     if args.datatype == "train":
-        NUM = {5:200_000, 10:300_000, 20:200_000,
-               30:200_000, 50:100_000, 70:80_000,
+        NUM = {5:100_000, 10:100_000, 20:100_000,
+               30:100_000, 50:100_000, 70:80_000,
               100:40_000}[N]
     elif args.datatype == "test":
         NUM = 1_000

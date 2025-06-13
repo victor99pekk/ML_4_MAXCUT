@@ -60,10 +60,19 @@ def evaluate(mc, model, X, Y, n):
             pred = np.zeros(n, dtype=int)
             pred[list(chosen)] = 1
             cut_val = cut_value(pred, X[i])
+            # print(cut_val.shape())
             total_value += cut_val
-        
-        acc = total_value / (mc)
-        print(f"\ncut / optimal: {total_value}/{mc} = {acc:.2f}")
+        # total_value = float(total_value.item())
+        if isinstance(mc, np.ndarray):
+            if mc.size == 1:
+                mc_val = float(mc.item())
+            else:
+                mc_val = float(np.mean(mc))
+        else:
+            mc_val = float(mc)
+        acc = total_value / mc_val if mc_val != 0 else float('nan')
+        # acc = total_value / (mc.cpu().item())
+        print(f"\ncut / optimal: {acc:.2f}")
     model.train()
     return acc
 
@@ -130,6 +139,7 @@ def training_loop_AMP_optimized(mc, model,
     else:
         thres = 5000 if model.name == "LSTM-PointerNetwork" else 5000
         test_precision = 100
+    # mc = float(mc[:test_precision].mean().item())
     mc = mc[:test_precision].mean()
     mc *= test_precision  # Scale the max-cut value by the number of training samples
     try:
