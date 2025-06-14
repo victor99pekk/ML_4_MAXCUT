@@ -321,10 +321,9 @@ def main():
         model.load_state_dict(load_state)
     interrupted = False
     samples_seen = 0
+    run_start = time.perf_counter()
     try:
-        # test_plot_file = plot_file
         test_plot_file = None
-        run_start = time.perf_counter()
         samples_seen = training_loop_AMP_optimized(
             mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
             train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
@@ -332,25 +331,30 @@ def main():
     except KeyboardInterrupt:
         interrupted = True
         print("\n[Ctrl-C] KeyboardInterrupt caught – leaving training loop early …")
-        # fall-through into finally (do *not* re-raise!)
     finally:
         print("Training complete. Saving model state...")
-        torch.save(model.state_dict(), f"{folder_path}/weights.pth")
+        try:
+            torch.save(model.state_dict(), f"{folder_path}/weights.pth")
+            print("Model weights saved.")
+        except Exception as e:
+            print(f"Failed to save model weights: {e}")
         test_acc = evaluate(mc, model, X_test_t, Y_test, n)
         dur = time.perf_counter() - run_start
-        write_experiment_info_txt(
-            multiplier, i, model, optimizer, batch_size, samples_seen, num_epochs, lr, n, train_file, test_file,
-            test_acc, train_losses[-1], dur, out_file, load, 
-            weights_path=weights_path
-        )
-        test_plot_file = f"{folder_path}/test_acc={n}.png"
-        # --- Save accuracy and loss lists to CSV files ---
-        # acc_csv_file = f"{folder_path}/test_accuracies.csv"
-        # loss_csv_file = f"{folder_path}/train_losses.csv"
-        plot_test_acc(test_accs, model.name, n, folder_path)
-        plot_train_loss(train_losses, model.name, n, folder_path)
-        
-    
+        try:
+            write_experiment_info_txt(
+                multiplier, i, model, optimizer, batch_size, samples_seen, num_epochs, lr, n, train_file, test_file,
+                test_acc, train_losses[-1] if train_losses else float('nan'), dur, out_file, load, 
+                weights_path=weights_path
+            )
+            print("Experiment info saved.")
+        except Exception as e:
+            print(f"Failed to save experiment info: {e}")
+        try:
+            plot_test_acc(test_accs, model.name, n, folder_path)
+            plot_train_loss(train_losses, model.name, n, folder_path)
+            print("Plots saved.")
+        except Exception as e:
+            print(f"Failed to save plots: {e}")
 
 
 if __name__ == "__main__":
