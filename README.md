@@ -1,13 +1,13 @@
 
 # Maximum cut: <br>`Heuristic algorithm` vs `Deep Learning`
 
-- A thourugh description about this experiment can be found in our [report](report.pdf). But below is a brief description.
+- A thourugh description about this experiment can be found in our [report](ML_4_MAXCUT.pdf). But below is a brief description.
 
 In this experiment we compare the performance of a `heuristic approximation` algorithm for maximum cut called `Goemans-Williamson`, with two different `deep learning` approaches to solve the maxmimum cut problem the best we can. 
 
 
 ## `Deep Learning` approaches
-We used 2 different deep learning approaches. The code for the two models can be found in [neural_network/models](neural_network/models). We describe the architectures of our deep learning models throughly in our [paper](report/report.pdf), but below is a brief description is:
+We used 2 different deep learning approaches. The code for the two models can be found in [neural_network/models](neural_network/models). We describe the architectures of our deep learning models throughly in our [paper](ML_4_MAXCUT.pdf), but below is a brief description is:
 
 The first model we implemented was a `LSTM`-model, where one of the LSTM-cells was used as an encoder and the other was used as a decoder. The LSTM approach was inspired from the paper ().
 
