@@ -1,7 +1,7 @@
 
 # Maximum cut: <br>`Heuristic algorithm` vs `Deep Learning`
 
-- A thourugh description about this experiment can be found in our [report](report/report.pdf). But below is a brief description.
+- A thourugh description about this experiment can be found in our [report](report.pdf). But below is a brief description.
 
 In this experiment we compare the performance of a `heuristic approximation` algorithm for maximum cut called `Goemans-Williamson`, with two different `deep learning` approaches to solve the maxmimum cut problem the best we can. 
 
