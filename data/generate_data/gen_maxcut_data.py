@@ -100,7 +100,6 @@ def make_dataset(num_graphs: int, n: int, out_csv: str, seed: int = 0, edge_mode
     Row schema:
       [ flatten(W) , (x_star==1) ∈ {0,1}^n , planted_cut_value ]
     """
-    seed = random.randint(0, 2**31-1)
     rng = np.random.default_rng(seed)
     Path(out_csv).parent.mkdir(parents=True, exist_ok=True)
 
