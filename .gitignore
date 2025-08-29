@@ -1,5 +1,6 @@
 *.csv
 *.pth
+*.zip
 neural_network/experiments/*.pth
 report/*
 data/test/
@@ -7,3 +8,4 @@ neural_network/test.py
 experiments/
 __pycache__/
 .vscode/
+*.pack
