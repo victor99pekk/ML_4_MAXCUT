@@ -13,7 +13,8 @@ import torch.nn.functional as F
 # from neural_network.networks.PointerNet import PointerNetwork
 from models.PointerNet import *
 from models.TransformerPointer import *
-import argparse
+from models.utils import *
+from models.Graphormer import GraphormerPointerNetwork
 
 
 def load_dataset(filename):
@@ -168,7 +169,103 @@ def training_loop_AMP_optimized(mc, model,
     finally:
         return samples_seen
 
+def to_device_batch_indices(train_seqs, idx, n, device):
+    # helper to slice your Python list of sequences by tensor indices
+    seqs = [train_seqs[j] for j in idx.cpu().tolist()]
+    return seqs
 
+def training_loop_policy_gradient(
+    mc, model, optimizer,
+    X_train_t, Y_train_t, n,
+    batch_size, num_epochs,
+    train_seqs,  # still used if mixing in supervised CE
+    X_val_t, Y_val_t,
+    folder_path, test_accuracies, train_losses,
+    lam_sup=0.0, lam_rl=1.0, entropy_beta=0.01,
+    temperature=1.0, accumulation_steps=1
+):
+    """
+    lam_sup: weight for supervised CE (0 => pure RL).
+    lam_rl:  weight for policy gradient.
+    entropy_beta: entropy regularization coeff.
+    """
+    device = X_train_t.device
+    scaler = GradScaler()
+    N = X_train_t.size(0)
+    model.train()
+
+    # housekeeping (reuse your thresholds)
+    thres = 5000
+    test_precision = min(100, X_val_t.size(0))
+    mc_val = mc[:test_precision].mean() * test_precision
+
+    samples_seen, step = 0, 0
+
+    for epoch in range(1, num_epochs + 1):
+        perm = torch.randperm(N, device=device)
+        epoch_loss = 0.0
+        optimizer.zero_grad()
+
+        for batch_idx in range(0, N, batch_size):
+            idx = perm[batch_idx:batch_idx + batch_size]
+            batch_X = X_train_t[idx].to(device)             # (b, n, n)
+            batch_Y = Y_train_t[idx].to(device)             # (b, n) ±1
+
+            # ---- RL sampling ----
+            # sequences: list of index lists; logprob_sums/entropies: (b,)
+            sequences, logprob_sums, entropies = model.sample_with_logprobs(
+                adj_matrix=batch_X, temperature=temperature, mask_repeats=True
+            )
+            m_policy = sequences_to_masks(sequences, n, device)  # (b, n)
+            rewards = cut_value_batch(batch_X, m_policy)          # (b,)
+
+            # ---- Baseline (GW partition) ----
+            baseline = baseline_from_labels(batch_X, batch_Y)     # (b,)
+            advantage = rewards - baseline
+            # Normalize advantage per batch for stability
+            adv = (advantage - advantage.mean()) / (advantage.std() + 1e-6)
+
+            # ---- Policy loss (REINFORCE) ----
+            policy_loss = -(adv.detach() * logprob_sums).mean()
+            # Entropy bonus
+            entropy_loss = - entropy_beta * entropies.mean()
+
+            # ---- Optional supervised loss (mixed training) ----
+            sup_loss = torch.tensor(0.0, device=device)
+            if lam_sup > 0.0:
+                batch_targets = to_device_batch_indices(train_seqs, idx, n, device=None)  # list of lists
+                with autocast():
+                    sup_loss = model(batch_X, target_seq=batch_targets)
+
+            # ---- Total loss ----
+            total_loss = lam_rl * (policy_loss + entropy_loss) + lam_sup * sup_loss
+
+            with autocast():
+                loss_scaled = total_loss / accumulation_steps
+
+            scaler.scale(loss_scaled).backward()
+            epoch_loss += float(total_loss.detach().cpu()) * batch_X.size(0)
+
+            # optimizer step every accumulation_steps
+            if ((batch_idx // batch_size + 1) % accumulation_steps == 0) or (batch_idx + batch_size >= N):
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+
+            samples_seen += idx.size(0)
+            step += idx.size(0)
+            # periodic eval
+            if step >= thres:
+                step = 0
+                print(f"\n\n[RL] Processed {samples_seen} samples; remaining: {N - batch_idx}")
+                acc = evaluate(mc_val, model, X_val_t[:test_precision], Y_val_t[:test_precision], n)
+                if acc is not None: test_accuracies.append(acc)
+                train_losses.append(float(total_loss.detach().cpu()))
+
+        avg = epoch_loss / N
+        print(f"[RL] Epoch {epoch}/{num_epochs} — Avg Loss: {avg:.4f}")
+
+    return samples_seen
 
 import os
 
@@ -269,22 +366,24 @@ def main():
     train_file    = f"data/train_n={n}.csv"
     test_file     = f"data/test/test_n={n}.csv"
     X_train, Y_train, n_train, _ = load_dataset(train_file)
-    stop = X_train.shape[1]
+    # stop = X_train.shape[1]
     # X_train = X_train[:, :stop]  # Ensure correct shape
     X_test,  Y_test,  n_test, mc  = load_dataset(test_file)
     load = False
     model_name = "PointerNetwork"
     model_name = "TransformerNetwork"
+    model_name = "GraphormerPointerNetwork"
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 20
-    num_epochs    = 1 * 10**2
-    lr            = 0.1
+    num_epochs_sl = 1 * 10**2  # Supervised pretrain epochs
+    num_epochs_rl = 1 * 10**2  # RL fine-tune epochs
+    lr            = 0.01
     multiplier = 1
-    path = None
+    # path = None
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
-    base_name = "neural_network/experiments/nbr_"
-    ext = ".txt"
+    # base_name = "neural_network/experiments/nbr_"
+    # ext = ".txt"
     i = 1
     while os.path.exists(f"neural_network/experiments/nbr_{i}"):
         i += 1
@@ -293,11 +392,11 @@ def main():
     folder_path = f"neural_network/experiments/nbr_{i}"
     os.makedirs(folder_path, exist_ok=True)
     out_file = f"{folder_path}/experiment_info.txt"
-    test_plot_file = f"{folder_path}/test_acc={n}.png"
-    train_plot_file = f"{folder_path}/train_loss={n}.png"
+    # test_plot_file = f"{folder_path}/test_acc={n}.png"
+    # train_plot_file = f"{folder_path}/train_loss={n}.png"
 
     train_seqs = build_target_sequences(Y_train, n)
-    test_seqs  = build_target_sequences(Y_test,  n)
+    # test_seqs  = build_target_sequences(Y_test,  n)
 
     device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     X_train_t = torch.tensor(X_train, device=device)  # shape (N_train, n, n)
@@ -314,19 +413,45 @@ def main():
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
                             multiplier=multiplier).to(device)
+    elif model_name == "GraphormerPointerNetwork":
+        model = GraphormerPointerNetwork(input_dim=n,
+                            embedding_dim=embedding_dim,
+                            hidden_dim=hidden_dim,
+                            # multiplier=multiplier,
+                            num_encoder_layers=3,
+                            # num_heads=8,
+                            # ffn_dim=512,
+                            dropout=0.1).to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 
     if load:
         load_state = torch.load(weights_path, map_location="cpu")
         model.load_state_dict(load_state)
-    interrupted = False
+    # interrupted = False
     samples_seen = 0
     run_start = time.perf_counter()
     try:
-        test_plot_file = None
-        samples_seen = training_loop_AMP_optimized(
-            mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
-            train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
+        # test_plot_file = None
+        # samples_seen = training_loop_AMP_optimized(
+        #     mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
+        #     train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
+        # )
+        # Supervised pretrain
+        # samples_seen = training_loop_AMP_optimized(
+        #     mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
+        #     train_seqs, X_test_t, Y_test, folder_path, test_accs, train_losses
+        # )
+
+        # RL fine-tune
+        Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
+        Y_test_t  = torch.tensor(Y_test,  device=device)
+        samples_seen = training_loop_policy_gradient(
+            mc, model, optimizer,
+            X_train_t, Y_train_t, n,
+            batch_size, num_epochs_rl,
+            train_seqs, X_test_t, Y_test_t,
+            folder_path, test_accs, train_losses,
+            lam_sup=0.1, lam_rl=1.0, entropy_beta=0.01, temperature=1.0
         )
     except KeyboardInterrupt:
         interrupted = True
