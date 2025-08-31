@@ -1,3 +1,4 @@
+import os
 import random
 import time
 import numpy as np
@@ -484,7 +485,7 @@ def debipartize_preserving_scalable(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate planted Max-Cut instances via BQP method.")
     parser.add_argument("--nbr_nodes", type=int, required=True, help="Number of nodes in each graph.")
-    parser.add_argument("--datatype", choices=["train", "test", "debug"], default="train")
+    parser.add_argument("--datatype", choices=["train", "test", "debug"], default="debug")
     parser.add_argument("--seed", type=int, default=6)
     parser.add_argument("--out", type=str, default=None, help="Output CSV file path")
     parser.add_argument("--base", type=float, default=1.0, help="Scale parameter for weight generation")
@@ -498,6 +499,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     N = args.nbr_nodes
+
+    
+    folder = os.path.join(Path("data"), args.datatype)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
     # Determine number of graphs to generate based on datatype (same logic as original):contentReference[oaicite:35]{index=35}
     if args.datatype == "train":
         num_graphs = {5: 10_000, 10: 100_000, 20: 100_000,
@@ -508,7 +515,7 @@ if __name__ == "__main__":
     else:  # "debug" or others
         num_graphs = 3
 
-    out_file = args.out or f"data/{args.datatype}_n={N}.csv"
+    out_file = os.path.join(folder, f"{args.datatype}_n={N}.csv")
     time0 = time.time()
     make_dataset(num_graphs, N, out_file,
                  seed=args.seed,

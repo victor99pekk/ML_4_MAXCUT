@@ -347,11 +347,7 @@ def write_experiment_info_txt(
         f.write(f"Test File: {test_file}\n")
         f.write(f"Device: {next(model.parameters()).device}\n")
         f.write(f"Number of Parameters: {sum(p.numel() for p in model.parameters())}\n\n")
-        # f.write(f"Network Name: {getattr(model, 'name', type(model).__name__)}\n")
         f.write(f"Network Architecture:\n{model}\n")
-        # if test_accuracies is not None and len(test_accuracies) > 0:
-        #     f.write(f"Final Test Accuracy: {test_accuracies[-1]*100:.2f}%\n")
-        # f.write("============================================\n")
     print(f"Experiment info written to {out_file}")   
 
 def save_list_to_csv(data_list, filename):
@@ -363,7 +359,7 @@ def save_list_to_csv(data_list, filename):
 def main():
     # from config import n
     n = 5
-    train_file    = f"data/train_n={n}.csv"
+    train_file    = f"data/train/train_n={n}.csv"
     test_file     = f"data/test/test_n={n}.csv"
     X_train, Y_train, n_train, _ = load_dataset(train_file)
     # stop = X_train.shape[1]
@@ -392,11 +388,8 @@ def main():
     folder_path = f"neural_network/experiments/nbr_{i}"
     os.makedirs(folder_path, exist_ok=True)
     out_file = f"{folder_path}/experiment_info.txt"
-    # test_plot_file = f"{folder_path}/test_acc={n}.png"
-    # train_plot_file = f"{folder_path}/train_loss={n}.png"
 
     train_seqs = build_target_sequences(Y_train, n)
-    # test_seqs  = build_target_sequences(Y_test,  n)
 
     device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     X_train_t = torch.tensor(X_train, device=device)  # shape (N_train, n, n)
@@ -417,10 +410,7 @@ def main():
         model = GraphormerPointerNetwork(input_dim=n,
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
-                            # multiplier=multiplier,
                             num_encoder_layers=3,
-                            # num_heads=8,
-                            # ffn_dim=512,
                             dropout=0.1).to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 

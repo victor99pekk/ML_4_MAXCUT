@@ -1,6 +1,6 @@
 # Get the directory where this Makefile lives
 ROOT_DIR := $(CURDIR)
-datatype ?= train
+datatype ?= debug
 
 # Default target (so 'make' runs this)
 .PHONY: all
