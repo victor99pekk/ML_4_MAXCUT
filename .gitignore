@@ -1,6 +1,6 @@
 *.csv
 *.pth
-*.zip
+*.pth.zip
 neural_network/experiments/*.pth
 report/*
 data/test/
