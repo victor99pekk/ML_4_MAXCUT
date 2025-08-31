@@ -15,6 +15,7 @@ from models.PointerNet import *
 from models.TransformerPointer import *
 from models.utils import *
 from models.Graphormer import GraphormerPointerNetwork
+from rl_utils import *
 
 
 def load_dataset(filename):
@@ -372,11 +373,14 @@ def main():
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 20
-    num_epochs_sl = 1 * 10**2  # Supervised pretrain epochs
+    num_epochs    = 1 * 10**2  # Total epochs
+    num_epochs_sl = 1 * 10**0  # Supervised pretrain epochs
     num_epochs_rl = 1 * 10**2  # RL fine-tune epochs
     lr            = 0.01
     multiplier = 1
     # path = None
+    test_plot_file = f"{folder_path}/test_acc={n}.png"
+    train_plot_file = f"{folder_path}/train_loss={n}.png"
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
     # base_name = "neural_network/experiments/nbr_"
     # ext = ".txt"
@@ -394,6 +398,8 @@ def main():
     device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     X_train_t = torch.tensor(X_train, device=device)  # shape (N_train, n, n)
     X_test_t  = torch.tensor(X_test,  device=device)  # shape (N_test,  n, n)
+    Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
+    Y_test_t  = torch.tensor(Y_test,  device=device)
     test_accs = []
     train_losses = []
     if model_name == "PointerNetwork":
@@ -412,6 +418,7 @@ def main():
                             hidden_dim=hidden_dim,
                             num_encoder_layers=3,
                             dropout=0.1).to(device)
+    attach_sampling_methods(model)
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 
     if load:
@@ -422,27 +429,46 @@ def main():
     run_start = time.perf_counter()
     try:
         # test_plot_file = None
-        # samples_seen = training_loop_AMP_optimized(
-        #     mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs,
-        #     train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
-        # )
+        samples_seen = training_loop_AMP_optimized(
+            mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
+            train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
+        )
+
+        train_losses, test_accs = training_loop_policy_gradient(
+            mc=None,                # optional, not used internally
+            model=model,
+            optimizer=optimizer,
+            X_train_t=X_train_t,
+            Y_train_t=Y_train_t,
+            n=n,
+            batch_size=64,
+            num_epochs=20,
+            train_seqs=train_seqs,  # your supervised target sequences (list of lists) if you mix in CE
+            test_accuracies=[],     # will be appended to each epoch (kept for compatibility)
+            train_losses=[],        # will be appended
+            lam_sup=0.0,            # set >0.0 to mix supervised CE
+            lam_rl=1.0,
+            entropy_beta=0.01,
+            temperature=1.0,
+            accumulation_steps=1
+        )
         # Supervised pretrain
         # samples_seen = training_loop_AMP_optimized(
         #     mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
         #     train_seqs, X_test_t, Y_test, folder_path, test_accs, train_losses
         # )
 
-        # RL fine-tune
-        Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
-        Y_test_t  = torch.tensor(Y_test,  device=device)
-        samples_seen = training_loop_policy_gradient(
-            mc, model, optimizer,
-            X_train_t, Y_train_t, n,
-            batch_size, num_epochs_rl,
-            train_seqs, X_test_t, Y_test_t,
-            folder_path, test_accs, train_losses,
-            lam_sup=0.1, lam_rl=1.0, entropy_beta=0.01, temperature=1.0
-        )
+        # # RL fine-tune
+        # Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
+        # Y_test_t  = torch.tensor(Y_test,  device=device)
+        # samples_seen = training_loop_policy_gradient(
+        #     mc, model, optimizer,
+        #     X_train_t, Y_train_t, n,
+        #     batch_size, num_epochs_rl,
+        #     train_seqs, X_test_t, Y_test_t,
+        #     folder_path, test_accs, train_losses,
+        #     lam_sup=0.1, lam_rl=1.0, entropy_beta=0.01, temperature=1.0
+        # )
     except KeyboardInterrupt:
         interrupted = True
         print("\n[Ctrl-C] KeyboardInterrupt caught – leaving training loop early …")
