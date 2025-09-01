@@ -175,100 +175,100 @@ def to_device_batch_indices(train_seqs, idx, n, device):
     seqs = [train_seqs[j] for j in idx.cpu().tolist()]
     return seqs
 
-def training_loop_policy_gradient(
-    mc, model, optimizer,
-    X_train_t, Y_train_t, n,
-    batch_size, num_epochs,
-    train_seqs,  # still used if mixing in supervised CE
-    X_val_t, Y_val_t,
-    folder_path, test_accuracies, train_losses,
-    lam_sup=0.0, lam_rl=1.0, entropy_beta=0.01,
-    temperature=1.0, accumulation_steps=1
-):
-    """
-    lam_sup: weight for supervised CE (0 => pure RL).
-    lam_rl:  weight for policy gradient.
-    entropy_beta: entropy regularization coeff.
-    """
-    device = X_train_t.device
-    scaler = GradScaler()
-    N = X_train_t.size(0)
-    model.train()
+# def training_loop_policy_gradient(
+#     mc, model, optimizer,
+#     X_train_t, Y_train_t, n,
+#     batch_size, num_epochs,
+#     train_seqs,  # still used if mixing in supervised CE
+#     X_val_t, Y_val_t,
+#     folder_path, test_accuracies, train_losses,
+#     lam_sup=0.0, lam_rl=1.0, entropy_beta=0.01,
+#     temperature=1.0, accumulation_steps=1
+# ):
+#     """
+#     lam_sup: weight for supervised CE (0 => pure RL).
+#     lam_rl:  weight for policy gradient.
+#     entropy_beta: entropy regularization coeff.
+#     """
+#     device = X_train_t.device
+#     scaler = GradScaler()
+#     N = X_train_t.size(0)
+#     model.train()
 
-    # housekeeping (reuse your thresholds)
-    thres = 5000
-    test_precision = min(100, X_val_t.size(0))
-    mc_val = mc[:test_precision].mean() * test_precision
+#     # housekeeping (reuse your thresholds)
+#     thres = 5000
+#     test_precision = min(100, X_val_t.size(0))
+#     mc_val = mc[:test_precision].mean() * test_precision
 
-    samples_seen, step = 0, 0
+#     samples_seen, step = 0, 0
 
-    for epoch in range(1, num_epochs + 1):
-        perm = torch.randperm(N, device=device)
-        epoch_loss = 0.0
-        optimizer.zero_grad()
+#     for epoch in range(1, num_epochs + 1):
+#         perm = torch.randperm(N, device=device)
+#         epoch_loss = 0.0
+#         optimizer.zero_grad()
 
-        for batch_idx in range(0, N, batch_size):
-            idx = perm[batch_idx:batch_idx + batch_size]
-            batch_X = X_train_t[idx].to(device)             # (b, n, n)
-            batch_Y = Y_train_t[idx].to(device)             # (b, n) ±1
+#         for batch_idx in range(0, N, batch_size):
+#             idx = perm[batch_idx:batch_idx + batch_size]
+#             batch_X = X_train_t[idx].to(device)             # (b, n, n)
+#             batch_Y = Y_train_t[idx].to(device)             # (b, n) ±1
 
-            # ---- RL sampling ----
-            # sequences: list of index lists; logprob_sums/entropies: (b,)
-            sequences, logprob_sums, entropies = model.sample_with_logprobs(
-                adj_matrix=batch_X, temperature=temperature, mask_repeats=True
-            )
-            m_policy = sequences_to_masks(sequences, n, device)  # (b, n)
-            rewards = cut_value_batch(batch_X, m_policy)          # (b,)
+#             # ---- RL sampling ----
+#             # sequences: list of index lists; logprob_sums/entropies: (b,)
+#             sequences, logprob_sums, entropies = model.sample_with_logprobs(
+#                 adj_matrix=batch_X, temperature=temperature, mask_repeats=True
+#             )
+#             m_policy = sequences_to_masks(sequences, n, device)  # (b, n)
+#             rewards = cut_value_batch(batch_X, m_policy)          # (b,)
 
-            # ---- Baseline (GW partition) ----
-            baseline = baseline_from_labels(batch_X, batch_Y)     # (b,)
-            advantage = rewards - baseline
-            # Normalize advantage per batch for stability
-            adv = (advantage - advantage.mean()) / (advantage.std() + 1e-6)
+#             # ---- Baseline (GW partition) ----
+#             baseline = baseline_from_labels(batch_X, batch_Y)     # (b,)
+#             advantage = rewards - baseline
+#             # Normalize advantage per batch for stability
+#             adv = (advantage - advantage.mean()) / (advantage.std() + 1e-6)
 
-            # ---- Policy loss (REINFORCE) ----
-            policy_loss = -(adv.detach() * logprob_sums).mean()
-            # Entropy bonus
-            entropy_loss = - entropy_beta * entropies.mean()
+#             # ---- Policy loss (REINFORCE) ----
+#             policy_loss = -(adv.detach() * logprob_sums).mean()
+#             # Entropy bonus
+#             entropy_loss = - entropy_beta * entropies.mean()
 
-            # ---- Optional supervised loss (mixed training) ----
-            sup_loss = torch.tensor(0.0, device=device)
-            if lam_sup > 0.0:
-                batch_targets = to_device_batch_indices(train_seqs, idx, n, device=None)  # list of lists
-                with autocast():
-                    sup_loss = model(batch_X, target_seq=batch_targets)
+#             # ---- Optional supervised loss (mixed training) ----
+#             sup_loss = torch.tensor(0.0, device=device)
+#             if lam_sup > 0.0:
+#                 batch_targets = to_device_batch_indices(train_seqs, idx, n, device=None)  # list of lists
+#                 with autocast():
+#                     sup_loss = model(batch_X, target_seq=batch_targets)
 
-            # ---- Total loss ----
-            total_loss = lam_rl * (policy_loss + entropy_loss) + lam_sup * sup_loss
+#             # ---- Total loss ----
+#             total_loss = lam_rl * (policy_loss + entropy_loss) + lam_sup * sup_loss
 
-            with autocast():
-                loss_scaled = total_loss / accumulation_steps
+#             with autocast():
+#                 loss_scaled = total_loss / accumulation_steps
 
-            scaler.scale(loss_scaled).backward()
-            epoch_loss += float(total_loss.detach().cpu()) * batch_X.size(0)
+#             scaler.scale(loss_scaled).backward()
+#             epoch_loss += float(total_loss.detach().cpu()) * batch_X.size(0)
 
-            # optimizer step every accumulation_steps
-            if ((batch_idx // batch_size + 1) % accumulation_steps == 0) or (batch_idx + batch_size >= N):
-                scaler.step(optimizer)
-                scaler.update()
-                optimizer.zero_grad()
+#             # optimizer step every accumulation_steps
+#             if ((batch_idx // batch_size + 1) % accumulation_steps == 0) or (batch_idx + batch_size >= N):
+#                 scaler.step(optimizer)
+#                 scaler.update()
+#                 optimizer.zero_grad()
 
-            samples_seen += idx.size(0)
-            step += idx.size(0)
-            # periodic eval
-            if step >= thres:
-                step = 0
-                print(f"\n\n[RL] Processed {samples_seen} samples; remaining: {N - batch_idx}")
-                acc = evaluate(mc_val, model, X_val_t[:test_precision], Y_val_t[:test_precision], n)
-                if acc is not None: test_accuracies.append(acc)
-                train_losses.append(float(total_loss.detach().cpu()))
+#             samples_seen += idx.size(0)
+#             step += idx.size(0)
+#             # periodic eval
+#             if step >= thres:
+#                 step = 0
+#                 print(f"\n\n[RL] Processed {samples_seen} samples; remaining: {N - batch_idx}")
+#                 acc = evaluate(mc_val, model, X_val_t[:test_precision], Y_val_t[:test_precision], n)
+#                 if acc is not None: test_accuracies.append(acc)
+#                 train_losses.append(float(total_loss.detach().cpu()))
 
-        avg = epoch_loss / N
-        print(f"[RL] Epoch {epoch}/{num_epochs} — Avg Loss: {avg:.4f}")
+#         avg = epoch_loss / N
+#         print(f"[RL] Epoch {epoch}/{num_epochs} — Avg Loss: {avg:.4f}")
 
-    return samples_seen
+#     return samples_seen
 
-import os
+# import os
 
 def plot_train_loss(train_losses, model_name, n, folder_path):
     import numpy as np
@@ -368,8 +368,8 @@ def main():
     X_test,  Y_test,  n_test, mc  = load_dataset(test_file)
     load = False
     model_name = "PointerNetwork"
-    model_name = "TransformerNetwork"
-    model_name = "GraphormerPointerNetwork"
+    # model_name = "TransformerNetwork"
+    # model_name = "GraphormerPointerNetwork"
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 20
@@ -379,8 +379,7 @@ def main():
     lr            = 0.01
     multiplier = 1
     # path = None
-    test_plot_file = f"{folder_path}/test_acc={n}.png"
-    train_plot_file = f"{folder_path}/train_loss={n}.png"
+    
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
     # base_name = "neural_network/experiments/nbr_"
     # ext = ".txt"
@@ -392,6 +391,8 @@ def main():
     folder_path = f"neural_network/experiments/nbr_{i}"
     os.makedirs(folder_path, exist_ok=True)
     out_file = f"{folder_path}/experiment_info.txt"
+    test_plot_file = f"{folder_path}/test_acc={n}.png"
+    train_plot_file = f"{folder_path}/train_loss={n}.png"
 
     train_seqs = build_target_sequences(Y_train, n)
 
@@ -400,6 +401,8 @@ def main():
     X_test_t  = torch.tensor(X_test,  device=device)  # shape (N_test,  n, n)
     Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
     Y_test_t  = torch.tensor(Y_test,  device=device)
+    X_eval_t = torch.tensor(X_test, device=device)
+    Y_eval_t = torch.tensor(Y_test, device=device)
     test_accs = []
     train_losses = []
     if model_name == "PointerNetwork":
@@ -419,6 +422,7 @@ def main():
                             num_encoder_layers=3,
                             dropout=0.1).to(device)
     attach_sampling_methods(model)
+    attach_greedy_decode(model) 
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 
     if load:
@@ -429,28 +433,21 @@ def main():
     run_start = time.perf_counter()
     try:
         # test_plot_file = None
-        samples_seen = training_loop_AMP_optimized(
-            mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
-            train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
-        )
+        # samples_seen = training_loop_AMP_optimized(
+        #     mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
+        #     train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
+        # )
 
-        train_losses, test_accs = training_loop_policy_gradient(
-            mc=None,                # optional, not used internally
-            model=model,
-            optimizer=optimizer,
-            X_train_t=X_train_t,
-            Y_train_t=Y_train_t,
-            n=n,
-            batch_size=64,
-            num_epochs=20,
-            train_seqs=train_seqs,  # your supervised target sequences (list of lists) if you mix in CE
-            test_accuracies=[],     # will be appended to each epoch (kept for compatibility)
-            train_losses=[],        # will be appended
-            lam_sup=0.0,            # set >0.0 to mix supervised CE
-            lam_rl=1.0,
-            entropy_beta=0.01,
-            temperature=1.0,
-            accumulation_steps=1
+        train_losses, eval_scores = train_rl_simple(
+            model, optimizer,
+            X_train_t, Y_train_t, n,
+            batch_size=64, num_epochs=20,
+            verbose=True, log_every_batches=5,
+            # Eval every epoch on validation set:
+            X_val_t=X_eval_t, Y_val_t=Y_eval_t,
+            eval_every_epochs=1, eval_batch_size=256,
+            # Save the best checkpoint:
+            save_best=True, best_ckpt_path="neural_network/experiments/best_rl.pt",
         )
         # Supervised pretrain
         # samples_seen = training_loop_AMP_optimized(
