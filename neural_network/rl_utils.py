@@ -540,8 +540,8 @@ def training_loop_policy_gradient(
     save_best: bool = False,
     best_ckpt_path: Optional[str] = None,
     # --- Adaptive exploration (non-breaking defaults) ---
-    explore_trigger_ratio: float = 0.95,   # start exploring when avgR/avgBase >= this
-    explore_relax_ratio: float = 0.90,     # exit explore if ratio falls below this
+    explore_trigger_ratio: float = 0.99,   # start exploring when avgR/avgBase >= this
+    explore_relax_ratio: float = 0.93,     # exit explore if ratio falls below this
     explore_patience: int = 5,             # consecutive printed batches to toggle on
     explore_cooldown: int = 20,            # min batches between toggles
     explore_temperature: float = 1.5,      # temperature while exploring
