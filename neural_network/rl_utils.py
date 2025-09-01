@@ -707,7 +707,7 @@ def training_loop_policy_gradient(
                 model_cut = rewards.mean().item()
                 base_cut = baseline.mean().item()
                 ratio = model_cut / (base_cut + 1e-8) if base_cut > 0 else 0.0
-                print(f"cut / baseline: {model_cut:.1f}/{base_cut:.1f}  =  {ratio:.2f}", flush=True)
+                print(f"cut / baseline: {model_cut:.2f}/{base_cut:.2f}  =  {ratio:.5f}", flush=True)
 
             # Update ratio for NEXT batch's exploration decision
             with torch.no_grad():
@@ -791,8 +791,8 @@ def train_rl_simple(
     save_best: bool = False,
     best_ckpt_path: Optional[str] = None,
     # Adaptive exploration (defaults keep old behavior)
-    explore_trigger_ratio: float = 0.95,
-    explore_relax_ratio: float = 0.90,
+    explore_trigger_ratio: float = 0.97,
+    explore_relax_ratio: float = 0.92,
     explore_patience: int = 5,
     explore_cooldown: int = 20,
     explore_temperature: float = 1.5,
