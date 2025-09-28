@@ -8,3 +8,5 @@ experiments/
 __pycache__/
 .vscode/
 *.pack
+__MACOSX/
+.DS_Store
