@@ -10,4 +10,4 @@ all: gen_data
 .PHONY: gen_data
 gen_data:
 # make gen_data edge_mode=real datatyope=debug nbr_nodes=21
-	python3 $(ROOT_DIR)/data/gen_maxcut_data.py --nbr_nodes $(nbr_nodes) --graph_type $(graph_type) --datatype $(datatype)
+	python3 $(ROOT_DIR)/data/gen_maxcut_data.py --nbr_nodes $(nbr_nodes) --graph_type $(graph_type) --data_type $(data_type)

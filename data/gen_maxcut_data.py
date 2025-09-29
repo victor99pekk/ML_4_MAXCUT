@@ -59,7 +59,7 @@ def gw_score(W: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
 # ------------------------------ Dataset I/O -----------------------------------
 def make_dataset(
     num_graphs: int, n: int, out_csv: str, graph_type: str,
-    seed: int = 0, edge_mode: str = "real",
+    seed: int = 0,
 ) -> None:
     """
     Save `num_graphs` instances. Each row:
@@ -76,7 +76,7 @@ def make_dataset(
         for _ in range(num_graphs):
 
             if graph_type == "projection_planting":
-                W, x, cut_val = gen_projection_planting(n=n, d=20)
+                W, x, cut_val = gen_projection_planting(n=n)
             elif graph_type == "fs_hard":
                 W, x, cut_val = gen_fs_hard(n=n, d=50,  theta1_deg=130.0, theta2_deg=150.0)
             for item in W.flatten():
@@ -90,13 +90,12 @@ def make_dataset(
             W = np.round(W, 2)
             cut_val = np.round(cut_val, 2)
 
-            m = W.shape[0]
             row = np.concatenate([W.ravel(), (x == 1).astype(int), [cut_val]])
-        print(f"mean= {np.mean(stats_arr):.2f}, std={np.std(stats_arr):.2f}")
+            f.write(",".join(map(str, row)) + "\n")
 
-    m = (n) if edge_mode == "real" else n
+        print(f"mean= {np.mean(stats_arr):.2f}, std={np.std(stats_arr):.2f}")
     print(f"Saved {num_graphs} graphs to '{out_csv}' "
-          f"(row length = {m*m + m + 1}, {edge_mode} mode; m={m})")
+          f"(row length = {n*n + n + 1})")
     
 def cut_value(W: np.ndarray, x: np.ndarray) -> float:
     return 0.25 * float(np.sum(W * (1 - np.outer(x, x))))
@@ -120,7 +119,7 @@ def gen_fs_hard(n, d=64, theta1_deg=75.0, theta2_deg=105.0, rng=None):
     rng = np.random.default_rng()
     V = rng.normal(size=(n, d)); V /= np.linalg.norm(V, axis=1, keepdims=True) + 1e-12
     S = np.clip(V @ V.T, -1.0, 1.0)
-    A = np.arccos(S)  # angles in [0, π]
+    A = np.arccos(S) 
     t1, t2 = np.deg2rad(theta1_deg), np.deg2rad(theta2_deg)
     c, h = 0.5*(t1+t2), 0.5*(t2-t1)
     W = 1.0 - np.abs(A - c)/(h + 1e-12)
@@ -132,25 +131,11 @@ def gen_fs_hard(n, d=64, theta1_deg=75.0, theta2_deg=105.0, rng=None):
     m = n*(n-1)/2; avg = W.sum()/(2*m)
     return gw_score(W/avg if avg > 0 else W)
 
-def gen_planted_equivalent_maxcut(n, base=10.0, seed=None, return_meta=True):
+def gen_planted_equivalent_maxcut(n, base=10.0, seed=None):
     """
     Generate ONE Max-Cut instance using the 'keeping equivalence' planting scheme.
-
-    Implements (numbers = lines in your algorithm image):
-      1-3)  Q ~ N(0,1), scale by `base`, symmetrize
-      4-5)  x in {-1, +1}^n  (planted solution)
-      6-7)  lambda_i = sum_{j!=i} |Q_ij|
-      8)    c = (Q + diag(lambda)) x
-      9)    w_{0i} = (1/4)*sum_{j!=i} Q_ij + (1/2)*c_i
-      10)   w_{ij} = (1/4)*Q_ij  for 1<=i<j<=n
-      11-13) assemble W on n+1 nodes; set s_0 = 1 and s[1:] = x
-
-    Returns
-    -------
-    W : (n+1, n+1) float array, symmetric, zero diagonal
-    s : (n+1,) float array, planted cut in {-1, +1} with s[0]=+1
-    meta : dict with intermediates (only if return_meta=True)
     """
+
     rng = np.random.RandomState(seed) if seed is not None else np.random
     n = n - 1
     Q = rng.randn(n, n) * base
@@ -184,25 +169,23 @@ def gen_planted_equivalent_maxcut(n, base=10.0, seed=None, return_meta=True):
 
 def gen_projection_planting(
     n: int,
-    rng: np.random.Generator,
     *,
     density: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Returns (Q, x_star) for min (1/2) x^T Q x, x ∈ {±1}^n.
-    Construction: Q = P A^T A P + εP, where P = I - (1/n) x* x*^T.
-    Then Q ⪰ 0, Q x* = 0 and null(Q) = span{x*} ⇒ x* (and -x*) is the global minimizer.
+    Generate ONE Max-Cut instance using the 'projection planting' planting scheme.
     """
+
     rng = np.random.default_rng()
 
     x_star = rng.choice([-1, 1], size=n)
 
-    # Projector that kills x*
+    # Projector that kills x_star
     gamma = 0.01
     P = np.eye(n) - gamma * np.outer(x_star, x_star) / float(n)
 
     # Random PSD on the orthogonal subspace
-    k = n  # rows in A; k≥n-1 is fine
+    k = n  
     # A = rng.uniform(0.4, 0.6, size=(k, n))
     # A = rng.exponential(2/n, size=(k, n))  # exponential distribution for positive weights
     mean = 1
@@ -215,10 +198,9 @@ def gen_projection_planting(
 
     S = A.T @ A
     Q = P @ S @ P
-    Q += 1e-9 * P                    # make nullspace exactly span{x*} numerically
-    Q = 0.5 * (Q + Q.T)              # symmetrize for safety
+    Q += 1e-9 * P
+    #Q = 0.5 * (Q + Q.T)              
 
-    # Diagonal never affects argmin over ±1 (it’s a constant), set to 0 for cleanliness
     np.fill_diagonal(Q, 0.0)
     cut_value = 0.25 * float(np.sum(Q * (1 - np.outer(x_star, x_star))))
     if n < 15:
@@ -236,7 +218,7 @@ def permute_W(W, rng):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate planted Max-Cut instances via BQP method.")
     parser.add_argument("--nbr_nodes", type=int, required=True, help="Number of nodes in each graph.")
-    parser.add_argument("--datatype", choices=["train", "test", "debug", "validation"], default="debug")
+    parser.add_argument("--data_type", choices=["train", "test", "debug", "validation"], default="debug")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--graph_type", choices=["bqp_planting", "projection_planting", "fs_hard"], default="bqp_planting",
                         help="Type of graph to generate")
@@ -244,27 +226,20 @@ if __name__ == "__main__":
 
     N = args.nbr_nodes
     
-    folder = os.path.join(Path("data"), args.datatype)
+    folder = os.path.join(Path("data"), args.data_type)
     if not os.path.exists(folder):
         os.makedirs(folder)
 
-    # Determine number of graphs to generate based on datatype (same logic as original):contentReference[oaicite:35]{index=35}
-    if args.datatype == "train":
+    if args.data_type == "train":
         num_graphs = {5: 10_000, 10: 100_000, 20: 100_000,
                       30: 100_000, 50: 100_000, 70: 80_000,
                       100: 40_000}.get(N, 10)
-    elif args.datatype == "test" or "validation":
+    elif args.data_type == "test" or "validation":
         num_graphs = 1_000
     else:  # "debug" or others
         num_graphs = 3
 
-    out_file = os.path.join(folder, f"{args.datatype}_n={N}.csv")
+    out_file = os.path.join(folder, f"{args.data_type}_n={N}.csv")
     time0 = time.time()
-    make_dataset(num_graphs, N, out_file,
-                 seed=args.seed,
-                 edge_mode=args.edge_mode,
-                 base=args.base,
-                 balanced=args.balanced,
-                 weight_dist=args.weight_dist,
-                 density=args.density)
+    make_dataset(num_graphs, N, out_file, graph_type=args.graph_type, seed=args.seed)
     print(f"Done in {time.time() - time0:.1f} seconds.")
