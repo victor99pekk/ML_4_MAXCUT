@@ -16,11 +16,11 @@ def validate(W_flat, labels01, claimed_cut):
     val = 0.25 * float(np.sum(W * (1 - np.outer(x, x))))
 
     # brute-force best (works for n<=22 or so)
-    best = -1.0; bestx=None
+    best = float('-inf'); bestx=None
     for s in range(1<<n):
         xtry = np.array([(1 if (s>>i)&1 else -1) for i in range(n)])
         v = 0.25 * float(np.sum(W * (1 - np.outer(xtry, xtry))))
-        if v > best + 1e-12:
+        if v > best + 1e-12 and v != 0.0:
             best, bestx = v, xtry
     if abs(best - claimed_cut) <= 1e-5:
         return True
@@ -36,11 +36,11 @@ def validate_optimal_partition(W_flat, labels01, claimed_cut):
     val = 0.25 * float(np.sum(W * (1 - np.outer(x, x))))
 
     # brute-force best (works for n<=22 or so)
-    best = -1.0; bestx=None
+    best = float("-inf"); bestx=None
     for s in range(1<<n):
         xtry = np.array([(1 if (s>>i)&1 else -1) for i in range(n)])
         v = 0.25 * float(np.sum(W * (1 - np.outer(xtry, xtry))))
-        if v > best + 1e-12:
+        if v > best + 1e-12 and v != 0.0:
             best, bestx = v, xtry
     if np.array_equal((bestx == 1).astype(int), labels01) or np.array_equal((bestx == 1).astype(int), 1 - labels01):
         # print("Validation succeeded.")
@@ -79,6 +79,10 @@ def make_dataset(
                 W, x, cut_val = gen_projection_planting(n=n)
             elif graph_type == "fs_hard":
                 W, x, cut_val = gen_fs_hard(n=n, d=50,  theta1_deg=130.0, theta2_deg=150.0)
+            elif graph_type == "bqp_planting":
+                W, x, cut_val = bqp_plantinng(n=n)
+            else:
+                raise ValueError(f"Unknown graph_type '{graph_type}'")
             for item in W.flatten():
                 stats_arr.append(item)
                 if item > 1 or item < 0:
@@ -131,7 +135,7 @@ def gen_fs_hard(n, d=64, theta1_deg=75.0, theta2_deg=105.0, rng=None):
     m = n*(n-1)/2; avg = W.sum()/(2*m)
     return gw_score(W/avg if avg > 0 else W)
 
-def gen_planted_equivalent_maxcut(n, base=10.0, seed=None):
+def bqp_plantinng(n, base=10.0, seed=None):
     """
     Generate ONE Max-Cut instance using the 'keeping equivalence' planting scheme.
     """
@@ -167,10 +171,20 @@ def gen_planted_equivalent_maxcut(n, base=10.0, seed=None):
 
     return W, s, cut_value
 
+def generate_psd_matrix(n):
+    """Generates a random NSD matrix of size n x n."""
+    A = np.random.rand(n, n)  # Generate a random matrix
+    A = (A + A.T) / 2          # Make it symmetric
+    np.fill_diagonal(A, 0)    # Ensure diagonal is zero
+
+    for i in range(n):
+        row_sum = np.sum(np.abs(A[i, :]))
+        A[i, i] = row_sum  # Set diagonal to satisfy NSD condition
+
+    return A
+
 def gen_projection_planting(
-    n: int,
-    *,
-    density: float = 1.0,
+    n: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Generate ONE Max-Cut instance using the 'projection planting' planting scheme.
@@ -181,7 +195,7 @@ def gen_projection_planting(
     x_star = rng.choice([-1, 1], size=n)
 
     # Projector that kills x_star
-    gamma = 0.01
+    gamma = 1
     P = np.eye(n) - gamma * np.outer(x_star, x_star) / float(n)
 
     # Random PSD on the orthogonal subspace
@@ -190,16 +204,14 @@ def gen_projection_planting(
     # A = rng.exponential(2/n, size=(k, n))  # exponential distribution for positive weights
     mean = 1
     std = 0.5**2
-    A = rng.normal((mean**0.5) * (n**-0.5), (std**0.5) * n**(-0.25), size=(k, n))
+    #A = rng.normal((mean**0.5) * (n**-0.5), (std**0.5) * n**(-0.25), size=(k, n))
     # A = rng.binomial(1, (1/(2*(n**0.5))), size=(k, n))
+    A = generate_psd_matrix(n)
 
-    if density < 1.0:
-        A *= (rng.random(size=A.shape) < density).astype(float)
-
-    S = A.T @ A
+    S = A#.T @ A
     Q = P @ S @ P
-    Q += 1e-9 * P
-    #Q = 0.5 * (Q + Q.T)              
+    Q += 5e-1 * P
+    #Q = 0.5 * (Q + Q.T)
 
     np.fill_diagonal(Q, 0.0)
     cut_value = 0.25 * float(np.sum(Q * (1 - np.outer(x_star, x_star))))
@@ -234,9 +246,10 @@ if __name__ == "__main__":
         num_graphs = {5: 10_000, 10: 100_000, 20: 100_000,
                       30: 100_000, 50: 100_000, 70: 80_000,
                       100: 40_000}.get(N, 10)
-    elif args.data_type == "test" or "validation":
+    elif args.data_type == "test" or args.data_type == "validation":
         num_graphs = 1_000
     else:  # "debug" or others
+        print("Debug mode: generating only 3 graphs.")
         num_graphs = 3
 
     out_file = os.path.join(folder, f"{args.data_type}_n={N}.csv")
