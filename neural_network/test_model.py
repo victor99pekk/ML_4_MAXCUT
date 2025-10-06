@@ -47,7 +47,7 @@ def load_dataset(filename):
     mc = data[:, -1]
     return X, Y, n, mc
 
-X = load_dataset(f"data/test/test_n={n}.csv")[0]  # Load only the adjacency matrix part
+X = load_dataset(f"data/test/validation_n={n}.csv")[0]  # Load only the adjacency matrix part
 X = torch.tensor(X)  # Convert to tensor
 
 # Iterate over each sample for inference and measure time
