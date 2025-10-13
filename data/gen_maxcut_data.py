@@ -50,8 +50,8 @@ def validate_optimal_partition(W_flat, labels01, claimed_cut):
     print(f"Cut value: {best}, claimed: {claimed_cut}")
     return False
 
-def gw_score(W: np.ndarray, solve=True) -> tuple[np.ndarray, np.ndarray, float]:
-    if solve:
+def gw_score(W: np.ndarray, find_cut=True) -> tuple[np.ndarray, np.ndarray, float]:
+    if find_cut:
         res = solve(W, trials=512, solver="SCS", seed=0, polish=True)
     else:
         res = {"labels": np.ones(W.shape[0]), "objval": 0.0}
@@ -122,7 +122,7 @@ def brute_force_best(W: np.ndarray) -> tuple[float, np.ndarray]:
     return best_val, best_x
 
 
-def gen_fs_hard(n, d=int(1e8), theta1_deg=89, theta2_deg=91, rng=None):
+def gen_fs_hard(n, d=int(3e3), theta1_deg=89, theta2_deg=91, rng=None):
     """Hard spherical Max-Cut instance for GW (hat bump around 90°)."""
     rng = np.random.default_rng()
     V = rng.normal(size=(n, d)); V /= np.linalg.norm(V, axis=1, keepdims=True) + 1e-12
@@ -138,7 +138,7 @@ def gen_fs_hard(n, d=int(1e8), theta1_deg=89, theta2_deg=91, rng=None):
     W = 0.5*(W + W.T)
     # normalize average edge weight to 1 (optional but helpful)
     m = n*(n-1)/2; avg = W.sum()/(2*m)
-    return gw_score(W/avg if avg > 0 else W, solve=False)
+    return gw_score(W/avg if avg > 0 else W, find_cut=True)
 
 def bqp_plantinng(n, base=10.0, seed=None):
     """

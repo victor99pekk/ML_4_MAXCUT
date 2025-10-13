@@ -362,7 +362,7 @@ def main():
     # from config import n
     parser = argparse.ArgumentParser(description="Train a network for Max-Cut")
     parser.add_argument('--nbr_nodes', type=int, default=10, help='Number of nodes')
-    parser.add_argument('--model', type=str, default='PointerNetwork', choices=['PointerNetwork', 'TransformerNetwork', 'GraphormerPointerNetwork'],
+    parser.add_argument('--model', type=str, default='lstm', choices=['lstm', 'transformer', 'GraphormerPointerNetwork'],
                         help='Model type to use')
     parser.add_argument('--rl', type=bool, help='Fine-tune with RL', default=False)
     args = parser.parse_args()
@@ -412,12 +412,12 @@ def main():
     Y_eval_t = torch.tensor(Y_val, device=device)
     test_accs = []
     train_losses = []
-    if model_name == "PointerNetwork":
+    if model_name == "lstm":
         model = PointerNetwork(input_dim=n,
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
                             multiplier=multiplier).to(device)
-    elif model_name == "TransformerNetwork":
+    elif model_name == "transformer":
         model = TransformerNetwork(input_dim=n,
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,

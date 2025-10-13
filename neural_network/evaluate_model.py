@@ -35,7 +35,7 @@ def load_dataset(filename):
 
 def main():
     parser = argparse.ArgumentParser(description="Test a trained Max-Cut model")
-    parser.add_argument('--model_name', type=str, default='PointerNetwork', choices=['PointerNetwork', 'TransformerNetwork'],
+    parser.add_argument('--model_name', type=str, default='lstm', choices=['lstm', 'transformer'],
                         help='Model type to use')
     parser.add_argument('--n', type=int, default=10, help='Number of nodes')
     parser.add_argument('--compile_model', type=bool, default=True, help='Use torch.compile for model')
@@ -46,14 +46,14 @@ def main():
 
     global embedding_dim, hidden_dim, multiplier, device
 
-    if model_name == "PointerNetwork":
+    if model_name == "lstm":
         model = PointerNetwork(input_dim=n,
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
                             multiplier=multiplier).to(device)
         model.load_state_dict(torch.load(f"neural_network/experiments/transformer/{n}/weights.pth", map_location=device))
 
-    elif model_name == "TransformerNetwork":
+    elif model_name == "transformer":
         model = TransformerNetwork(input_dim=n,
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
@@ -63,7 +63,6 @@ def main():
     if compile_model:
         model = torch.compile(model)
     model.eval()
-    #X_train, Y_train, n_train, _ = load_dataset(train_file)
     inputs, targets, n,_= load_dataset(f"data/validation/validation_n={n}.csv")  # Load only the adjacency matrix part
     inputs = torch.tensor(inputs)  # Convert to tensor
     targets = torch.tensor(targets)
