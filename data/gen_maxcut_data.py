@@ -50,8 +50,11 @@ def validate_optimal_partition(W_flat, labels01, claimed_cut):
     print(f"Cut value: {best}, claimed: {claimed_cut}")
     return False
 
-def gw_score(W: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
-    res = solve(W, trials=512, solver="SCS", seed=0, polish=True)
+def gw_score(W: np.ndarray, solve=True) -> tuple[np.ndarray, np.ndarray, float]:
+    if solve:
+        res = solve(W, trials=512, solver="SCS", seed=0, polish=True)
+    else:
+        res = {"labels": np.ones(W.shape[0]), "objval": 0.0}
     return W, res["labels"].astype(int), cut_value(W, res["labels"])
 
 
@@ -78,7 +81,7 @@ def make_dataset(
             if graph_type == "projection_planting":
                 W, x, cut_val = gen_projection_planting(n=n)
             elif graph_type == "fs_hard":
-                W, x, cut_val = gen_fs_hard(n=n, d=50,  theta1_deg=130.0, theta2_deg=150.0)
+                W, x, cut_val = gen_fs_hard(n=n)
             elif graph_type == "bqp_planting":
                 W, x, cut_val = bqp_plantinng(n=n)
             else:
@@ -98,6 +101,7 @@ def make_dataset(
             f.write(",".join(map(str, row)) + "\n")
 
         print(f"mean= {np.mean(stats_arr):.2f}, std={np.std(stats_arr):.2f}")
+        print(f"Density: {np.count_nonzero(stats_arr)/(len(stats_arr)):.2f}")
     print(f"Saved {num_graphs} graphs to '{out_csv}' "
           f"(row length = {n*n + n + 1})")
     
@@ -118,12 +122,13 @@ def brute_force_best(W: np.ndarray) -> tuple[float, np.ndarray]:
     return best_val, best_x
 
 
-def gen_fs_hard(n, d=64, theta1_deg=75.0, theta2_deg=105.0, rng=None):
+def gen_fs_hard(n, d=int(1e8), theta1_deg=89, theta2_deg=91, rng=None):
     """Hard spherical Max-Cut instance for GW (hat bump around 90°)."""
     rng = np.random.default_rng()
     V = rng.normal(size=(n, d)); V /= np.linalg.norm(V, axis=1, keepdims=True) + 1e-12
-    S = np.clip(V @ V.T, -1.0, 1.0)
-    A = np.arccos(S) 
+    S = V @ V.T
+    S = np.clip(S, -1.0, 1.0)
+    A = np.arccos(S)
     t1, t2 = np.deg2rad(theta1_deg), np.deg2rad(theta2_deg)
     c, h = 0.5*(t1+t2), 0.5*(t2-t1)
     W = 1.0 - np.abs(A - c)/(h + 1e-12)
@@ -133,7 +138,7 @@ def gen_fs_hard(n, d=64, theta1_deg=75.0, theta2_deg=105.0, rng=None):
     W = 0.5*(W + W.T)
     # normalize average edge weight to 1 (optional but helpful)
     m = n*(n-1)/2; avg = W.sum()/(2*m)
-    return gw_score(W/avg if avg > 0 else W)
+    return gw_score(W/avg if avg > 0 else W, solve=False)
 
 def bqp_plantinng(n, base=10.0, seed=None):
     """

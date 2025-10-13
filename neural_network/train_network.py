@@ -3,6 +3,7 @@
 # This script trains a arbitray pytorch network to solve the Max-Cut problem on graphs.
 # It loads graph data, trains the model, and evaluates its performance.
 
+import argparse
 import csv
 import math
 import os
@@ -359,17 +360,23 @@ def save_list_to_csv(data_list, filename):
 
 def main():
     # from config import n
-    n = 5
+    parser = argparse.ArgumentParser(description="Train a network for Max-Cut")
+    parser.add_argument('--nbr_nodes', type=int, default=10, help='Number of nodes')
+    parser.add_argument('--model', type=str, default='PointerNetwork', choices=['PointerNetwork', 'TransformerNetwork', 'GraphormerPointerNetwork'],
+                        help='Model type to use')
+    parser.add_argument('--rl', type=bool, help='Fine-tune with RL', default=False)
+    args = parser.parse_args()
+
+    n = args.nbr_nodes
+    model_name = args.model
+    fine_tune_rl = args.rl
     train_file    = f"data/train/train_n={n}.csv"
     test_file     = f"data/test/test_n={n}.csv"
+    validation_file = f"data/validation/validation_n={n}.csv"
     X_train, Y_train, n_train, _ = load_dataset(train_file)
-    # stop = X_train.shape[1]
-    # X_train = X_train[:, :stop]  # Ensure correct shape
     X_test,  Y_test,  n_test, mc  = load_dataset(test_file)
+    X_val,   Y_val,   n_val, _  = load_dataset(validation_file)
     load = False
-    model_name = "PointerNetwork"
-    # model_name = "TransformerNetwork"
-    # model_name = "GraphormerPointerNetwork"
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 20
@@ -391,8 +398,8 @@ def main():
     folder_path = f"neural_network/experiments/nbr_{i}"
     os.makedirs(folder_path, exist_ok=True)
     out_file = f"{folder_path}/experiment_info.txt"
-    test_plot_file = f"{folder_path}/test_acc={n}.png"
-    train_plot_file = f"{folder_path}/train_loss={n}.png"
+    # test_plot_file = f"{folder_path}/test_acc={n}.png"
+    # train_plot_file = f"{folder_path}/train_loss={n}.png"
 
     train_seqs = build_target_sequences(Y_train, n)
 
@@ -401,8 +408,8 @@ def main():
     X_test_t  = torch.tensor(X_test,  device=device)  # shape (N_test,  n, n)
     Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
     Y_test_t  = torch.tensor(Y_test,  device=device)
-    X_eval_t = torch.tensor(X_test, device=device)
-    Y_eval_t = torch.tensor(Y_test, device=device)
+    X_eval_t = torch.tensor(X_val, device=device)
+    Y_eval_t = torch.tensor(Y_val, device=device)
     test_accs = []
     train_losses = []
     if model_name == "PointerNetwork":
@@ -438,34 +445,32 @@ def main():
         #     train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
         # )
 
-        train_losses, eval_scores = train_rl_simple(
-            model, optimizer,
-            X_train_t, Y_train_t, n,
-            batch_size=64, num_epochs=20,
-            verbose=True, log_every_batches=5,
-            # Eval every epoch on validation set:
-            X_val_t=X_eval_t, Y_val_t=Y_eval_t,
-            eval_every_epochs=1, eval_batch_size=256,
-            # Save the best checkpoint:
-            save_best=True, best_ckpt_path="neural_network/experiments/best_rl.pt",
-        )
-        # Supervised pretrain
-        # samples_seen = training_loop_AMP_optimized(
-        #     mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
-        #     train_seqs, X_test_t, Y_test, folder_path, test_accs, train_losses
-        # )
-
-        # # RL fine-tune
-        # Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
-        # Y_test_t  = torch.tensor(Y_test,  device=device)
-        # samples_seen = training_loop_policy_gradient(
-        #     mc, model, optimizer,
+        # train_losses, eval_scores = train_rl_simple(
+        #     model, optimizer,
         #     X_train_t, Y_train_t, n,
-        #     batch_size, num_epochs_rl,
-        #     train_seqs, X_test_t, Y_test_t,
-        #     folder_path, test_accs, train_losses,
-        #     lam_sup=0.1, lam_rl=1.0, entropy_beta=0.01, temperature=1.0
+        #     batch_size=64, num_epochs=20,
+        #     verbose=True, log_every_batches=5,
+        #     X_val_t=X_eval_t, Y_val_t=Y_eval_t,
+        #     eval_every_epochs=1, eval_batch_size=256,
+        #     save_best=True, best_ckpt_path="neural_network/experiments/best_rl.pt",
         # )
+        #Supervised training
+        samples_seen = training_loop_AMP_optimized(
+            mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
+            train_seqs, X_test_t, Y_test, folder_path, test_accs, train_losses
+        )
+
+        if fine_tune_rl: # RL fine-tune
+            Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
+            Y_test_t  = torch.tensor(Y_test,  device=device)
+            samples_seen = training_loop_policy_gradient(
+                mc, model, optimizer,
+                X_train_t, Y_train_t, n,
+                batch_size, num_epochs_rl,
+                train_seqs, X_test_t, Y_test_t,
+                folder_path, test_accs, train_losses,
+                lam_sup=0.1, lam_rl=1.0, entropy_beta=0.01, temperature=1.0
+            )
     except KeyboardInterrupt:
         interrupted = True
         print("\n[Ctrl-C] KeyboardInterrupt caught – leaving training loop early …")
@@ -476,7 +481,7 @@ def main():
             print("Model weights saved.")
         except Exception as e:
             print(f"Failed to save model weights: {e}")
-        test_acc = evaluate(mc, model, X_test_t, Y_test, n)
+        test_acc = evaluate(mc, model, X_eval_t, Y_eval_t, n)
         dur = time.perf_counter() - run_start
         try:
             write_experiment_info_txt(
@@ -488,8 +493,8 @@ def main():
         except Exception as e:
             print(f"Failed to save experiment info: {e}")
         try:
-            plot_test_acc(test_accs, model.name, n, folder_path)
-            plot_train_loss(train_losses, model.name, n, folder_path)
+            # plot_test_acc(test_accs, model.name, n, folder_path)
+            # plot_train_loss(train_losses, model.name, n, folder_path)
             print("Plots saved.")
         except Exception as e:
             print(f"Failed to save plots: {e}")
