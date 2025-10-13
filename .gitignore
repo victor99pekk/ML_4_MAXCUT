@@ -3,6 +3,9 @@
 *.pth.zip
 report/*
 data/test/
+data/validation/
+data/train/
+data/debug/
 neural_network/test.py
 experiments/
 __pycache__/
