@@ -10,13 +10,14 @@ from models.utils import *
 from rl_utils import *
 import matplotlib.pyplot as plt
 from torch.cuda.amp import autocast, GradScaler
+import math
+
 
 def partition_to_sequence(bits):
     indices = [i for i, b in enumerate(bits) if b == 1]
     return indices + [len(bits)]
 
 def load_dataset(filename):
-    import math
     data = np.loadtxt(filename, delimiter=",", dtype=float)
     if len(data.shape) == 1:
         num_samples, total_dim = 1, data.shape[0]
@@ -59,7 +60,6 @@ def cut_value(output, matrix):
 def evaluate(mc, model, X, Y, n):
     model.eval()
     with torch.no_grad():
-        total_value = 0
         outputs = model(X)
         total_cut = 0
         for i, out_seq in enumerate(outputs):
@@ -72,7 +72,7 @@ def evaluate(mc, model, X, Y, n):
 
         mc = float(mc.sum().item())
         acc = total_cut / mc if mc != 0 else float('nan')
-        print(f"\ncut / optimal: {total_cut}/{mc}  =  {max(acc, 0.0):.2f}")
+        print(f"\ncut / optimal: {total_cut}/{mc}  =  {max(acc, 0.0):.5f}")
     model.train()
     return acc
 
@@ -80,17 +80,14 @@ def evaluate(mc, model, X, Y, n):
 def training_loop_AMP_optimized(mc, model,
                   optimizer,
                   X_train_t,
-                  Y_train,
                   n,
                   batch_size,
                   num_epochs,
                   train_seqs,
                   X_test_t,
                   Y_test,
-                  folder_path,
                   test_accuracies,
                   train_losses,
-                  plot_repeat=None,
                   accumulation_steps: int = 1):
     """
     Args:
@@ -111,9 +108,6 @@ def training_loop_AMP_optimized(mc, model,
     else:
         thres = 5000 if model.name == "LSTM-PointerNetwork" else 5000
         test_precision = 100
-    # mc = float(mc[:test_precision].mean().item())
-    # mc = mc
-    # mc *= test_precision  # Scale the max-cut value by the number of training samples
     try:
         for epoch in range(1, num_epochs + 1):
             model.train()
@@ -157,20 +151,14 @@ def training_loop_AMP_optimized(mc, model,
                     if acc is not None:
                         test_accuracies.append(acc)
                     train_losses.append(loss_batch.item())
-                    # if plot_repeat is not None:
-                    #     plot_test_acc(test_accuracies, model.name, n, plot_repeat)
-            # acc = evaluate(model, X_test_t[:test_precision].to(device), Y_test[:test_precision], n)
-            # if acc is not None:
-            #     test_accuracies.append(acc)
+
             avg_loss = epoch_loss / N_train
-            # train_losses.append(avg_loss)
             print(f"Epoch {epoch}/{num_epochs} — Avg Loss: {avg_loss:.4f}")
 
     finally:
         return samples_seen
 
 def plot_train_loss(train_losses, model_name, n, folder_path):
-    import numpy as np
     plot_path = folder_path + "/train_loss_plot.png"
     loss_path = folder_path + "/train_loss.csv"
     save_list_to_csv(train_losses, loss_path)
@@ -277,11 +265,9 @@ def main():
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 20
-    # num_epochs    = 1 * 10**2  # Total epochs
     num_epochs_sl = 1 * 10**3  # Supervised pretrain epochs
     num_epochs_rl = 1 * 10**2  # RL fine-tune epochs
-    lr            = 0.01
-    # path = None
+    lr            = 0.001
     
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
 
@@ -293,15 +279,13 @@ def main():
     folder_path = f"neural_network/experiments/nbr_{i}"
     os.makedirs(folder_path, exist_ok=True)
     out_file = f"{folder_path}/experiment_info.txt"
-    # test_plot_file = f"{folder_path}/test_acc={n}.png"
-    # train_plot_file = f"{folder_path}/train_loss={n}.png"
 
     train_seqs = build_target_sequences(Y_train, n)
 
     device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     X_train_t = torch.tensor(X_train, device=device)  # shape (N_train, n, n)
     X_test_t  = torch.tensor(X_test,  device=device)  # shape (N_test,  n, n)
-    Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
+    Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) 
     Y_test_t  = torch.tensor(Y_test,  device=device)
     X_eval_t = torch.tensor(X_val, device=device)
     Y_eval_t = torch.tensor(Y_val, device=device)
@@ -324,31 +308,13 @@ def main():
     if load:
         load_state = torch.load(weights_path, map_location="cpu")
         model.load_state_dict(load_state)
-    # interrupted = False
     samples_seen = 0
     run_start = time.perf_counter()
     try:
-        # test_plot_file = None
-        # samples_seen = training_loop_AMP_optimized(
-        #     mc, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
-        #     train_seqs, X_test_t, Y_test, test_plot_file, test_accs, train_losses, test_plot_file
-        # )
-
-        # train_losses, eval_scores = train_rl_simple(
-        #     model, optimizer,
-        #     X_train_t, Y_train_t, n,
-        #     batch_size=64, num_epochs=20,
-        #     verbose=True, log_every_batches=5,
-        #     X_val_t=X_eval_t, Y_val_t=Y_eval_t,
-        #     eval_every_epochs=1, eval_batch_size=256,
-        #     save_best=True, best_ckpt_path="neural_network/experiments/best_rl.pt",
-        # )
-        #Supervised training
         samples_seen = training_loop_AMP_optimized(
             test_cuts, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
             train_seqs, X_test_t, Y_test, folder_path, test_accs, train_losses
         )
-
         if fine_tune_rl: # RL fine-tune
             Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
             Y_test_t  = torch.tensor(Y_test,  device=device)
@@ -361,7 +327,6 @@ def main():
                 lam_sup=0.1, lam_rl=1.0, entropy_beta=0.01, temperature=1.0
             )
     except KeyboardInterrupt:
-        interrupted = True
         print("\n[Ctrl-C] KeyboardInterrupt caught – leaving training loop early …")
     finally:
         print("Training complete. Saving model state...")
@@ -382,8 +347,6 @@ def main():
         except Exception as e:
             print(f"Failed to save experiment info: {e}")
         try:
-            # plot_test_acc(test_accs, model.name, n, folder_path)
-            # plot_train_loss(train_losses, model.name, n, folder_path)
             print("Plots saved.")
         except Exception as e:
             print(f"Failed to save plots: {e}")
