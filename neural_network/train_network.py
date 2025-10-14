@@ -1,23 +1,20 @@
-
-
-# This script trains a arbitray pytorch network to solve the Max-Cut problem on graphs.
-# It loads graph data, trains the model, and evaluates its performance.
-
 import argparse
 import csv
-import math
 import os
 import time
 import numpy as np
 import torch
-import torch.nn.functional as F
-# from neural_network.networks.PointerNet import PointerNetwork
 from models.PointerNet import *
 from models.TransformerPointer import *
 from models.utils import *
 from models.Graphormer import GraphormerPointerNetwork
 from rl_utils import *
+import matplotlib.pyplot as plt
+from torch.cuda.amp import autocast, GradScaler
 
+def partition_to_sequence(bits):
+    indices = [i for i, b in enumerate(bits) if b == 1]
+    return indices + [len(bits)]
 
 def load_dataset(filename):
     import math
@@ -33,13 +30,27 @@ def load_dataset(filename):
     mc = data[:, -1]
     return X, Y, n, mc
 
+# def build_target_sequences(Y, n):
+#     eos = n
+#     seqs = []
+#     for sol in Y:
+#         set1 = sorted(i for i, v in enumerate(sol) if v == 1)
+#         set0 = sorted(i for i, v in enumerate(sol) if v == -1)
+#         seqs.append(set1 + [eos] + set0)
+#     return seqs
+
 def build_target_sequences(Y, n):
-    eos = n
+    """
+    Build training target sequences from partition labels.
+    Accepts labels in {0,1} or {-1,1}. We convert to 0/1 (1=selected).
+    Returns a list of sequences: [i1, i2, ..., EOS=n]
+    """
     seqs = []
     for sol in Y:
-        set1 = sorted(i for i, v in enumerate(sol) if v == 1)
-        set0 = sorted(i for i, v in enumerate(sol) if v == -1)
-        seqs.append(set1 + [eos] + set0)
+        # Normalize to 0/1
+        # If entries are -1/1, map 1->1 and -1->0; if already 0/1, this keeps them.
+        bits01 = [(1 if v == 1 else 0) for v in sol]
+        seqs.append(partition_to_sequence(bits01))
     return seqs
 
 def cut_value(output, matrix):
@@ -74,17 +85,10 @@ def evaluate(mc, model, X, Y, n):
         else:
             mc_val = float(mc)
         acc = total_value / mc_val if mc_val != 0 else float('nan')
-        print(f"\ncut / optimal: {total_value}/{mc_val}  =  {acc:.2f}")
+        print(f"\ncut / optimal: {total_value}/{mc_val}  =  {max(acc, 0.0):.2f}")
     model.train()
     return acc
 
-
-
-import matplotlib.pyplot as plt
-# ...existing code...
-
-import torch
-from torch.cuda.amp import autocast, GradScaler
 
 def training_loop_AMP_optimized(mc, model,
                   optimizer,
@@ -116,7 +120,7 @@ def training_loop_AMP_optimized(mc, model,
     test_precision = 0
     if next(model.parameters()).device.type == "cpu":
         thres = 50 if model.name == "LSTM-PointerNetwork" else 500
-        test_precision = 100
+        test_precision = 25
     else:
         thres = 5000 if model.name == "LSTM-PointerNetwork" else 5000
         test_precision = 100
@@ -140,7 +144,13 @@ def training_loop_AMP_optimized(mc, model,
 
                 #forward + backward with mixed precision
                 with autocast():
-                    loss_batch = model(batch_X, target_seq=batch_targets)
+                    try:
+                        loss_batch = model(batch_X, target_seq=batch_targets)
+                    except Exception as e:
+                        print(f"Exception in model forward: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        raise  # Optionally re-raise to stop execution
                     loss = loss_batch / accumulation_steps
 
                 scaler.scale(loss).backward()
@@ -363,7 +373,7 @@ def main():
     # from config import n
     parser = argparse.ArgumentParser(description="Train a network for Max-Cut")
     parser.add_argument('--nbr_nodes', type=int, default=10, help='Number of nodes')
-    parser.add_argument('--model', type=str, default='lstm', choices=['lstm', 'transformer', 'GraphormerPointerNetwork'],
+    parser.add_argument('--model', type=str, default='lstm', choices=['lstm', 'transformer', 'gat'],
                         help='Model type to use')
     parser.add_argument('--rl', type=bool, help='Fine-tune with RL', default=False)
     args = parser.parse_args()
@@ -422,7 +432,7 @@ def main():
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
                             multiplier=multiplier).to(device)
-    elif model_name == "GraphormerPointerNetwork":
+    elif model_name == "gat":
         model = GraphormerPointerNetwork(input_dim=n,
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
