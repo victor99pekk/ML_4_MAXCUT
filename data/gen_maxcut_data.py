@@ -248,7 +248,7 @@ if __name__ == "__main__":
         os.makedirs(folder)
 
     if args.data_type == "train":
-        num_graphs = {5: 10_000, 10: 100_000, 20: 100_000,
+        num_graphs = {5: 100_000, 10: 100_000, 20: 100_000,
                       30: 100_000, 50: 100_000, 70: 80_000,
                       100: 40_000}.get(N, 10)
     elif args.data_type == "test" or args.data_type == "validation":

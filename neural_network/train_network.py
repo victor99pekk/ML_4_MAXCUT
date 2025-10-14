@@ -30,28 +30,36 @@ def load_dataset(filename):
     mc = data[:, -1]
     return X, Y, n, mc
 
-# def build_target_sequences(Y, n):
-#     eos = n
-#     seqs = []
-#     for sol in Y:
-#         set1 = sorted(i for i, v in enumerate(sol) if v == 1)
-#         set0 = sorted(i for i, v in enumerate(sol) if v == -1)
-#         seqs.append(set1 + [eos] + set0)
-#     return seqs
-
 def build_target_sequences(Y, n):
-    """
-    Build training target sequences from partition labels.
-    Accepts labels in {0,1} or {-1,1}. We convert to 0/1 (1=selected).
-    Returns a list of sequences: [i1, i2, ..., EOS=n]
-    """
+    eos = n
     seqs = []
     for sol in Y:
-        # Normalize to 0/1
-        # If entries are -1/1, map 1->1 and -1->0; if already 0/1, this keeps them.
-        bits01 = [(1 if v == 1 else 0) for v in sol]
-        seqs.append(partition_to_sequence(bits01))
+        set1 = sorted(i for i, v in enumerate(sol) if v == 1)
+        set0 = sorted(-100 for i, v in enumerate(sol) if v != 1)
+        seqs.append(set1 + [eos] + set0)
     return seqs
+
+def convert_target_to_tensor(target_seq, n, device):
+    batch_size = len(target_seq)
+    max_len = max(len(seq) for seq in target_seq)
+    target_tensor = torch.full((batch_size, max_len), -100, dtype=torch.long, device=device)
+    for i, seq in enumerate(target_seq):
+        target_tensor[i, :len(seq)] = torch.tensor(seq, dtype=torch.long, device=device)
+    return target_tensor.long()
+
+# def build_target_sequences(Y, n):
+#     """
+#     Build training target sequences from partition labels.
+#     Accepts labels in {0,1} or {-1,1}. We convert to 0/1 (1=selected).
+#     Returns a list of sequences: [i1, i2, ..., EOS=n]
+#     """
+#     seqs = []
+#     for sol in Y:
+#         # Normalize to 0/1
+#         # If entries are -1/1, map 1->1 and -1->0; if already 0/1, this keeps them.
+#         bits01 = [(1 if v == 1 else 0) for v in sol]
+#         seqs.append(partition_to_sequence(bits01))
+#     return seqs
 
 def cut_value(output, matrix):
 
@@ -137,7 +145,7 @@ def training_loop_AMP_optimized(mc, model,
             for batch_idx in range(0, N_train, batch_size):
                 idx = perm[batch_idx:batch_idx + batch_size]
                 batch_X = X_train_t[idx].to(device)
-                batch_targets = [train_seqs[j] for j in idx.cpu().tolist()]
+                batch_targets = convert_target_to_tensor([train_seqs[j] for j in idx.cpu().tolist()], n, device=device)
 
                 samples_seen += idx.size(0)
                 step += idx.size(0)

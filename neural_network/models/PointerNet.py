@@ -20,19 +20,15 @@ class PointerNetwork(nn.Module):
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim * self.mult
         self.hidden_dim = hidden_dim * self.mult
-
-        # embedding for each row
-        self.input_embed = nn.Linear(self.input_dim, self.embedding_dim)
-        # for encoder to process the rows as a sequence
+        self.input_embed = nn.Linear(self.input_dim, self.embedding_dim) # embedding for each row
+         # for encoder to process the rows as a sequence
         self.encoder_lstm = nn.LSTM(self.embedding_dim, self.hidden_dim, batch_first=True)
         # LSTM decoder generates the output sequence of node indices
         self.decoder_lstm = nn.LSTM(self.embedding_dim, self.hidden_dim, batch_first=True)
-
         # embedding for start vector of the decoder
         self.decoder_start = nn.Parameter(torch.FloatTensor(self.embedding_dim))
-        # Learnable EOS token representation in encoder space (for attention over n+1 positions)
+        # Learnable EOS token
         self.enc_eos = nn.Parameter(torch.FloatTensor(self.hidden_dim))
-
         nn.init.uniform_(self.decoder_start, -0.1, 0.1)
         nn.init.uniform_(self.enc_eos, -0.1, 0.1)
 
@@ -40,130 +36,89 @@ class PointerNetwork(nn.Module):
         """
         Args:
             adj_matrix: Tensor of shape (batch_size, n, n) representing symmetric adjacency matrices of graphs.
-            target_seq: (Optional) List/Tensor of target sequences (each a list/1D tensor of node indices including EOS=n).
-                        We will pad with EOS (id=n). For loss, we set ignore_index=eos_id so padded steps are ignored.
+                        Each adj_matrix[b] is an n x n matrix of edge weights for a graph with n nodes.
+            target_seq: (Optional) List of target sequences (each a list of node indices including EOS represented by index n) 
+                        for supervised training. If provided, the function returns the cross-entropy loss.
+                        If None, the model will output a predicted sequence of node indices for each input graph.
         Returns:
-            If target_seq is provided: scalar loss (torch.Tensor).
-            If target_seq is None: list of predicted sequences (each ends with EOS index n, unless max length reached).
+            If target_seq is provided: torch.Tensor scalar loss (cross-entropy).
+            If target_seq is None: a list of output sequences (each sequence is a list of node indices including EOS index).
         """
-        device = adj_matrix.device
         batch_size = adj_matrix.size(0)
-        n = adj_matrix.size(1)              # number of nodes
-        eos_id = n                          # EOS token index
-
-        # 1) Encoder: embed rows, run LSTM
-        node_embeds = self.input_embed(adj_matrix)                      # (B, n, D)
-        encoder_outputs, (enc_hidden, enc_cell) = self.encoder_lstm(node_embeds)
+        n = adj_matrix.size(1)  # number of nodes
+        # 1. **Encoder**: Embed each node's adjacency row and run through LSTM encoder
+        node_embeds = self.input_embed(adj_matrix)              # shape: (batch_size, n, embedding_dim)
+        encoder_outputs, (enc_hidden, enc_cell) = self.encoder_lstm(node_embeds)  
         dec_hidden, dec_cell = enc_hidden, enc_cell
-
-        # Initial decoder input (same for all in batch)
-        dec_input = self.decoder_start.unsqueeze(0).expand(batch_size, -1)  # (B, D)
-
-        # Tracks which node indices have been selected; dimension n+1 (last slot reserved for EOS)
-        selected_mask = torch.zeros(batch_size, n+1, dtype=torch.bool, device=device)
+        # Prepare the initial decoder input (start token embedding, same for all batch elements)
+        dec_input = self.decoder_start.unsqueeze(0).expand(batch_size, -1)  # shape: (batch_size, embedding_dim)
+        selected_mask = torch.zeros(batch_size, n+1, dtype=torch.bool, device=adj_matrix.device)
 
         if target_seq is not None:
-            # Convert list of variable-length sequences -> padded tensor using EOS as padding value
-            if not isinstance(target_seq, torch.Tensor):
-                # Ensure each sequence ends with EOS; then pad with EOS
-                norm_seqs = []
-                for seq in target_seq:
-                    if len(seq) == 0 or seq[-1] != eos_id:
-                        seq = list(seq) + [eos_id]
-                    norm_seqs.append(torch.tensor(seq, dtype=torch.long, device=device))
-                max_len = max(s.numel() for s in norm_seqs)
-                target_tensor = torch.full((batch_size, max_len), eos_id, dtype=torch.long, device=device)
-                for i, s in enumerate(norm_seqs):
-                    target_tensor[i, :s.numel()] = s
-                target_seq = target_tensor
-            else:
-                target_seq = target_seq.to(device).long()
-
             seq_len = target_seq.size(1)
             loss = 0.0
-
-            for t in range(seq_len):
-                # advance decoder one step
+            for t in range(seq_len): #run iterations of steps of LSTM
                 _, (dec_hidden, dec_cell) = self.decoder_lstm(dec_input.unsqueeze(1), (dec_hidden, dec_cell))
-
-                # attention over encoder outputs + EOS row
-                eos_enc = self.enc_eos.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, self.hidden_dim)  # (B,1,H)
-                extended_enc = torch.cat([encoder_outputs, eos_enc], dim=1)  # (B, n+1, H)
-
-                dec_h = dec_hidden[-1]  # (B, H)
-                logits = torch.bmm(extended_enc, dec_h.unsqueeze(2)).squeeze(2)  # (B, n+1)
-
-                # Mask previously selected *nodes only* (do NOT mask EOS during TF, or padded steps will explode)
-                if selected_mask.any():
-                    logits = logits.masked_fill(selected_mask, float('-inf'))
-
-                # ground-truth index at this step
-                target_indices = target_seq[:, t]  # (B,)
-
-                # CE loss; ignore EOS which serves as padding too
-                step_loss = F.cross_entropy(logits, target_indices, ignore_index=eos_id, reduction='sum')
+                # Compute attention (pointer) logits over n nodes + EOS
+                # Extend encoder outputs with EOS vector for attention scoring
+                eos_enc = self.enc_eos.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, self.hidden_dim)
+                # Concatenate encoder outputs and EOS to shape (batch, n+1, hidden_dim)
+                extended_enc = torch.cat([encoder_outputs, eos_enc], dim=1)
+                # Decoder hidden state for current step
+                dec_h = dec_hidden[-1]  # shape: (batch_size, hidden_dim)
+                # Attention logits via dot product between dec_h and each encoder output (including EOS)
+                logits = torch.bmm(extended_enc, dec_h.unsqueeze(2)).squeeze(2)  # shape: (batch_size, n+1)
+                # Mask out already selected indices (including if EOS was selected earlier)
+                logits.masked_fill_(selected_mask, float('-inf'))
+                # True target index at this step for each sample in batch
+                target_indices = target_seq[:, t].to(adj_matrix.device)  # shape: (batch_size,)
+                # Compute cross-entropy loss for this step (ignoring padded positions with target -100)
+                step_loss = F.cross_entropy(logits, target_indices, ignore_index=-100, reduction='sum')
                 loss += step_loss
-
-                # Update mask and next decoder input based on teacher target
-                # Mark only real nodes (< n) as selected; never mark eos_id
-                if t < seq_len:
-                    # clone only if we’re going to modify (cheap guard)
-                    sel_mask_next = selected_mask
-                    for i in range(batch_size):
-                        idx = int(target_indices[i].item())
-                        if 0 <= idx < n:
-                            if sel_mask_next is selected_mask:
-                                sel_mask_next = selected_mask.clone()
-                            sel_mask_next[i, idx] = True
-                    selected_mask = sel_mask_next
-
-                # Next decoder input: node embedding if real index, else zero vector when EOS
+                # Update mask and decoder input for next step using the target (teacher forcing)
+                # Mark selected index (from target) as used
+                selected_mask = selected_mask.clone()
+                for i in range(batch_size):
+                    idx = int(target_indices[i].item())
+                    if idx >= 0:
+                        selected_mask[i, idx] = True
+                # Prepare next decoder input: use the embedding of the selected node, or a zero vector if EOS was selected
                 next_inputs = []
                 for i in range(batch_size):
                     idx = int(target_indices[i].item())
-                    if idx == eos_id:  # EOS
-                        next_inputs.append(torch.zeros(self.embedding_dim, device=device))
+                    if idx == n or idx == -100:  # EOS index (n)
+                        # Use a zero vector (or could use a separate learned EOS embedding for decoder input)
+                        next_inputs.append(torch.zeros(self.embedding_dim, device=adj_matrix.device))
                     else:
-                        # Safety: clamp to valid nodes (0..n-1); in correct data this is unnecessary
-                        idx_clamped = max(0, min(n - 1, idx))
-                        next_inputs.append(node_embeds[i, idx_clamped])
-                dec_input = torch.stack(next_inputs, dim=0)  # (B, D)
-
+                        # Use the original embedding of the selected node as next decoder input
+                        next_inputs.append(node_embeds[i, idx])
+                dec_input = torch.stack(next_inputs, dim=0)  # shape: (batch_size, embedding_dim)
             avg_loss = loss / (batch_size * seq_len)
             return avg_loss
 
         else:
+            # **Inference mode**: generate a sequence of node indices for each graph
             output_sequences = [[] for _ in range(batch_size)]
-            for step in range(n + 1):  # maximum length n+1 (all nodes + EOS)
+            for step in range(n + 1):  # maximum output length is n+1 (including all nodes and EOS)
                 _, (dec_hidden, dec_cell) = self.decoder_lstm(dec_input.unsqueeze(1), (dec_hidden, dec_cell))
-                dec_h = dec_hidden[-1]  # (B, H)
-
+                dec_h = dec_hidden[-1]  # current decoder hidden state, shape: (batch_size, hidden_dim)
                 eos_enc = self.enc_eos.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, self.hidden_dim)
-                extended_enc = torch.cat([encoder_outputs, eos_enc], dim=1)  # (B, n+1, H)
-                logits = torch.bmm(extended_enc, dec_h.unsqueeze(2)).squeeze(2)  # (B, n+1)
-
-                # At inference, do mask previously selected indices (including EOS if already chosen)
-                logits = logits.masked_fill(selected_mask, float('-inf'))
-
-                selected_idx = torch.argmax(logits, dim=1)  # (B,)
+                extended_enc = torch.cat([encoder_outputs, eos_enc], dim=1)
+                logits = torch.bmm(extended_enc, dec_h.unsqueeze(2)).squeeze(2)  # shape: (batch_size, n+1)
+                logits.masked_fill_(selected_mask, float('-inf'))
+                # Select the index with maximum logit (highest probability) for each sample
+                selected_idx = torch.argmax(logits, dim=1)  # shape: (batch_size,)
                 for i in range(batch_size):
                     idx = int(selected_idx[i].item())
                     output_sequences[i].append(idx)
-                    # once EOS is picked, forbid picking it again; also forbid repeating nodes
                     selected_mask[i, idx] = True
-
-                # Next decoder input
+                # Prepare next decoder input (using the embedding of the selected node or zero if EOS)
                 next_inputs = []
                 for i in range(batch_size):
                     idx = int(selected_idx[i].item())
-                    if idx == eos_id:  # EOS selected
-                        next_inputs.append(torch.zeros(self.embedding_dim, device=device))
+                    if idx == n:  # EOS selected
+                        next_inputs.append(torch.zeros(self.embedding_dim, device=adj_matrix.device))
                     else:
                         next_inputs.append(node_embeds[i, idx])
                 dec_input = torch.stack(next_inputs, dim=0)
-
-                # optional early stop if all sequences have emitted EOS
-                if all(seq[-1] == eos_id for seq in output_sequences):
-                    break
-
             return output_sequences
