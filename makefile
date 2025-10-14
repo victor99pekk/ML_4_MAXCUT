@@ -14,7 +14,7 @@ gen_data:
 
 train:
 #!python neural_network/train_network.py
-	python3 $(ROOT_DIR)/neural_network/train_network.py --nbr_nodes $(nbr_nodes) --model_name $(model_name)
+	python3 $(ROOT_DIR)/neural_network/train_network.py --nbr_nodes $(nbr_nodes) --model $(model)
 
 evaluate:
-	python3 $(ROOT_DIR)/neural_network/evaluate_network.py --n $(n) --model_name $(model_name) --compile_model $(compile_model)
+	python3 $(ROOT_DIR)/neural_network/evaluate_network.py --n $(n) --model $(model) --compile_model $(compile_model)

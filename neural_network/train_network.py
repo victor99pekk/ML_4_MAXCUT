@@ -21,7 +21,7 @@ from rl_utils import *
 
 def load_dataset(filename):
     import math
-    data = np.loadtxt(filename, delimiter=",", dtype=int)
+    data = np.loadtxt(filename, delimiter=",", dtype=float).astype(int)
     if len(data.shape) == 1:
         num_samples, total_dim = 1, data.shape[0]
     else:
@@ -105,6 +105,7 @@ def training_loop_AMP_optimized(mc, model,
     Args:
       accumulation_steps: number of batches to accumulate gradients over
     """
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -115,7 +116,7 @@ def training_loop_AMP_optimized(mc, model,
     test_precision = 0
     if next(model.parameters()).device.type == "cpu":
         thres = 50 if model.name == "LSTM-PointerNetwork" else 500
-        test_precision = 25
+        test_precision = 100
     else:
         thres = 5000 if model.name == "LSTM-PointerNetwork" else 5000
         test_precision = 100
@@ -137,7 +138,7 @@ def training_loop_AMP_optimized(mc, model,
                 samples_seen += idx.size(0)
                 step += idx.size(0)
 
-                # forward + backward with mixed precision
+                #forward + backward with mixed precision
                 with autocast():
                     loss_batch = model(batch_X, target_seq=batch_targets)
                     loss = loss_batch / accumulation_steps
@@ -380,16 +381,15 @@ def main():
     embedding_dim = 128
     hidden_dim    = 256
     batch_size    = 20
-    num_epochs    = 1 * 10**2  # Total epochs
-    num_epochs_sl = 1 * 10**0  # Supervised pretrain epochs
+    # num_epochs    = 1 * 10**2  # Total epochs
+    num_epochs_sl = 1 * 10**3  # Supervised pretrain epochs
     num_epochs_rl = 1 * 10**2  # RL fine-tune epochs
     lr            = 0.01
     multiplier = 1
     # path = None
     
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
-    # base_name = "neural_network/experiments/nbr_"
-    # ext = ".txt"
+
     i = 1
     while os.path.exists(f"neural_network/experiments/nbr_{i}"):
         i += 1
