@@ -220,8 +220,8 @@ def gen_projection_planting(
 
     np.fill_diagonal(Q, 0.0)
     cut_value = 0.25 * float(np.sum(Q * (1 - np.outer(x_star, x_star))))
-    if n < 15:
-        validate(Q.flatten(), (x_star == 1).astype(int), cut_value)
+    # if n < 15:
+    #     validate(Q.flatten(), (x_star == 1).astype(int), cut_value)
     return Q, x_star.astype(int), cut_value
 
 

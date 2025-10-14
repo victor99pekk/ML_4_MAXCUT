@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from models.Gat import GraphAttentionEncoding
 
 class PointerNetwork(nn.Module):
     """Pointer Network model for Max-Cut (supervised learning version). 
     Encodes an input graph (adjacency matrix) and outputs a sequence of node indices 
     indicating one partition (with a special end token separating the two partitions).
     """
-    def __init__(self, input_dim: int, embedding_dim: int, hidden_dim: int, multiplier: int = 1):
+    def __init__(self, input_dim: int, embedding_dim: int, hidden_dim: int, graph_encoding: bool = True):
         """
         Args:
             input_dim: Dimension of each input element's feature vector (for Max-Cut, input_dim = n, the number of nodes).
@@ -16,10 +17,15 @@ class PointerNetwork(nn.Module):
         """
         super(PointerNetwork, self).__init__()
         self.name = "LSTM-PointerNetwork"
-        self.mult = 16
         self.input_dim = input_dim
-        self.embedding_dim = embedding_dim * self.mult
-        self.hidden_dim = hidden_dim * self.mult
+        self.embedding_dim = embedding_dim
+        self.input_embed = nn.Linear(self.input_dim, self.embedding_dim) # embedding for each row
+        if graph_encoding:
+            self.input_embed = GraphAttentionEncoding(input_dim=self.input_dim,
+                                                    hidden_dim=embedding_dim // 2,
+                                                    embedding_dim=embedding_dim,
+                                                    )
+        self.hidden_dim = hidden_dim
         self.input_embed = nn.Linear(self.input_dim, self.embedding_dim) # embedding for each row
          # for encoder to process the rows as a sequence
         self.encoder_lstm = nn.LSTM(self.embedding_dim, self.hidden_dim, batch_first=True)

@@ -277,6 +277,10 @@ def attach_sampling_methods(model):
         def _bound(self, adj_matrix, temperature=1.0, mask_repeats=True, forbid_eos_at_step0=True):
             return _sample_transformer_with_logprobs(self, adj_matrix, temperature, mask_repeats, forbid_eos_at_step0)
         model.sample_with_logprobs = _bound.__get__(model, model.__class__)
+    elif "GraphAttentionEncoding" in name or "GAT" in name:
+        def _bound(self, adj_matrix, temperature=1.0, mask_repeats=True, forbid_eos_at_step0=True):
+            raise NotImplementedError("Sampling not implemented for GAT models yet.")
+        model.sample_with_logprobs = _bound.__get__(model, model.__class__)
     else:
         raise TypeError(f"Unknown model type for sampling: {name}")
     return model
@@ -417,6 +421,10 @@ def attach_greedy_decode(model):
     elif "TransformerNetwork" in name or "Transformer" in name:
         def _bound(self, adj_matrix, mask_repeats=True, forbid_eos_at_step0=True):
             return _greedy_transformer_decode(self, adj_matrix, mask_repeats, forbid_eos_at_step0)
+        model.greedy_decode = _bound.__get__(model, model.__class__)
+    elif "GraphAttentionEncoding" in name or "GAT" in name:
+        def _bound(self, adj_matrix, mask_repeats=True, forbid_eos_at_step0=True):
+            raise NotImplementedError("Greedy decode not implemented for GAT models yet.")
         model.greedy_decode = _bound.__get__(model, model.__class__)
     else:
         raise TypeError(f"Unknown model type for greedy decode: {name}")

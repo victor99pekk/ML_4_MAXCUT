@@ -2,165 +2,142 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
+from models.Gat import GraphAttentionEncoding
 
 class TransformerNetwork(nn.Module):
-    """Fully Transformer-based Pointer Network for Max-Cut.
-    Encodes the input graph with self-attention and uses a Transformer decoder 
-    to produce a pointer distribution over input nodes at each step."""
+    """Fully Transformer-based Pointer Network for Max-Cut."""
     def __init__(self, input_dim: int, embedding_dim: int, hidden_dim: int, 
-                 n_heads: int = 1, num_encoder_layers: int = 4, num_decoder_layers: int = 3, multiplier: int = 1):
-        """
-        Args:
-            input_dim: Dimension of each input element's feature vector (for Max-Cut, n = number of nodes).
-            embedding_dim: Base size of node feature embeddings (will be scaled by 16 like original model).
-            hidden_dim: Base hidden size for Transformer model (will be scaled by 16).
-            n_heads: Number of attention heads for multi-head attention.
-            num_encoder_layers: Number of transformer encoder layers.
-            num_decoder_layers: Number of transformer decoder layers.
-        """
+                 n_heads: int = 1, num_encoder_layers: int = 4, num_decoder_layers: int = 3, graph_encoding: bool = True):
         super(TransformerNetwork, self).__init__()
         self.name = "TransformerNetwork"
         self.mult = 1
         self.input_dim = input_dim
         self.embedding_dim = embedding_dim * self.mult
         self.hidden_dim = hidden_dim * self.mult
+        
+
         self.row_input_embed = nn.Linear(self.input_dim, self.embedding_dim)
-        # If embedding_dim != hidden_dim, project embeddings to hidden_dim for the transformer
+        if graph_encoding:
+            self.input_embed = GraphAttentionEncoding(input_dim=self.input_dim,
+                                                    hidden_dim=embedding_dim // 2,
+                                                    embedding_dim=embedding_dim,
+                                                    )
+
         self.enc_input_proj = None
         if self.embedding_dim != self.hidden_dim:
             self.enc_input_proj = nn.Linear(self.embedding_dim, self.hidden_dim)
-        # Learnable start token for decoder input
+
+        # Learnable BOS (decoder start) and EOS key for pointer logits
         self.decoder_start = nn.Parameter(torch.FloatTensor(self.hidden_dim))
-        # Learnable vector for EOS token in pointer distributions
         self.enc_eos = nn.Parameter(torch.FloatTensor(self.hidden_dim))
         nn.init.uniform_(self.decoder_start, -0.1, 0.1)
         nn.init.uniform_(self.enc_eos, -0.1, 0.1)
 
-        # Transformer encoder and decoder layers
-        encoder_layer = nn.TransformerEncoderLayer(d_model=self.hidden_dim, nhead=n_heads, 
-                                                  dim_feedforward=self.hidden_dim * 4, batch_first=True)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=self.hidden_dim, nhead=n_heads,
+                                                   dim_feedforward=self.hidden_dim * 4, batch_first=True)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_encoder_layers)
-        decoder_layer = nn.TransformerDecoderLayer(d_model=self.hidden_dim, nhead=n_heads, 
-                                                  dim_feedforward=self.hidden_dim * 4, batch_first=True)
+
+        decoder_layer = nn.TransformerDecoderLayer(d_model=self.hidden_dim, nhead=n_heads,
+                                                   dim_feedforward=self.hidden_dim * 4, batch_first=True)
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_decoder_layers)
 
     def forward(self, adj_matrix: torch.Tensor, target_seq=None):
-        """
-        Args:
-            adj_matrix: Tensor of shape (batch_size, n, n) with adjacency matrices.
-            target_seq: (Optional) list or tensor of target index sequences (each includes EOS=n).
-                        If provided, returns cross-entropy loss; if None, returns predicted sequences.
-        """
         device = adj_matrix.device
-        batch_size, n, _ = adj_matrix.shape  # n = number of nodes
-        # 1. **Encoder**: Embed each node's adjacency row and apply Transformer encoder
-        node_embeds = self.row_input_embed(adj_matrix)           # shape: (batch, n, embedding_dim)
-        if self.enc_input_proj is not None:
-            enc_input = self.enc_input_proj(node_embeds)     # project to hidden_dim
-        else:
-            enc_input = node_embeds                         # shape: (batch, n, hidden_dim)
-        enc_outputs = self.encoder(enc_input)                # shape: (batch, n, hidden_dim)
-        # Append the learnable EOS embedding to encoder outputs for pointer attention
-        eos_enc = self.enc_eos.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, self.hidden_dim)
-        # `extended_enc` will serve as keys/values for pointer attention (encoder outputs + EOS)
-        extended_enc = torch.cat([enc_outputs, eos_enc], dim=1)  # shape: (batch, n+1, hidden_dim)
+        batch_size, n, _ = adj_matrix.shape
+        eos_id = n  # EOS is the (n)-th index in pointer space of size (n+1)
+
+        # ----- ENCODER -----
+        node_embeds = self.row_input_embed(adj_matrix)  # (B, n, E)
+        enc_input = self.enc_input_proj(node_embeds) if self.enc_input_proj is not None else node_embeds  # (B, n, H)
+        enc_outputs = self.encoder(enc_input)  # (B, n, H)
+
+        # Append EOS key so pointer has n+1 choices
+        eos_enc = self.enc_eos.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, self.hidden_dim)  # (B,1,H)
+        extended_enc = torch.cat([enc_outputs, eos_enc], dim=1)  # (B, n+1, H)
+
+        # Also build features for teacher-forcing gathers (nodes + ZERO vec for EOS as input token)
+        eos_feat = torch.zeros(batch_size, 1, self.hidden_dim, device=device)
+        extended_node_feats = torch.cat([enc_input, eos_feat], dim=1)  # (B, n+1, H)
 
         if target_seq is not None:
-            print(target_seq)
-            # **Training mode** – compute loss with teacher forcing
-            # Prepare decoder input sequence by prepending the start token and shifting target_seq
-            seq_len = target_seq.size(1)  # this should be n+1 (including EOS) for Max-Cut data
-            # Decoder input tokens: [START] + target_seq without last token
-            # (We create embeddings for these tokens)
-            start_token = self.decoder_start.unsqueeze(0).expand(batch_size, 1, -1)  # (batch, 1, hidden_dim)
-            # Prepare embedding for each target token (except last) in the sequence
-            # We use the original node embeddings (projected) for node indices and zero for EOS
-            # Gather node embeddings for target indices
-            # Build an extended node feature tensor with an extra zero vector for EOS index
-            if self.enc_input_proj is not None:
-                # `enc_input` already has projected node features (batch, n, hidden_dim)
-                node_features = enc_input
-            else:
-                node_features = node_embeds  # (batch, n, embedding_dim == hidden_dim in this case)
-            eos_feat = torch.zeros(batch_size, 1, self.hidden_dim, device=device)  # zero vector for EOS embedding
-            extended_node_feats = torch.cat([node_features, eos_feat], dim=1)      # shape: (batch, n+1, hidden_dim)
-            # Gather the embedding for each output token in target_seq (except the last one, since last is not input)
-            # target_seq shape: (batch, seq_len). We want embeddings for positions [0 .. seq_len-2]
-            if seq_len > 1:
-                # indices for decoder inputs (excluding last target) -> shape: (batch, seq_len-1)
-                dec_input_indices = target_seq[:, :-1].clone()
-            else:
-                dec_input_indices = torch.empty((batch_size, 0), dtype=torch.long, device=device)
-            if dec_input_indices.numel() > 0:
-                # dec_input_indices: (batch, seq_len-1), may contain -100
-                valid_mask = dec_input_indices != -100  # (batch, seq_len-1)
-                safe_indices = dec_input_indices.clone()
-                safe_indices[~valid_mask] = 0  # Replace -100 with a valid index (e.g., 0)
+            # ---------------- TRAINING (teacher forcing) ----------------
+            # 1) MASK everything after the first EOS per row to -100  (so loss & TF ignore post-EOS)
+            assert isinstance(target_seq, torch.Tensor), "Pass target_seq as a LongTensor"
+            target_seq = target_seq.to(device).long()
+            B, L = target_seq.size()
+            has_eos   = (target_seq == eos_id)                                 # (B, L)
+            first_eos = torch.where(
+                has_eos.any(dim=1),
+                has_eos.float().argmax(dim=1),                                 # first True index
+                torch.full((B,), L - 1, device=device, dtype=torch.long)
+            )  # (B,)
+            pos = torch.arange(L, device=device).unsqueeze(0).expand(B, -1)    # (B, L)
+            after_eos = pos > first_eos.unsqueeze(1)                           # (B, L)
+            target_seq = target_seq.masked_fill(after_eos, -100)
 
-                idx_expanded = safe_indices.unsqueeze(2).expand(-1, -1, self.hidden_dim)
-                dec_input_embeds = extended_node_feats.gather(dim=1, index=idx_expanded)  # (batch, seq_len-1, hidden_dim)
+            # 2) Build decoder inputs = [BOS] + safe-gather(targets[:-1]); use EOS as safe index, then zero pads
+            start_token = self.decoder_start.unsqueeze(0).expand(batch_size, 1, -1)  # (B,1,H)
+            if L > 1:
+                dec_input_indices = target_seq[:, :-1].clone()                 # (B, L-1)
+                pad_mask   = (dec_input_indices == -100)                       # (B, L-1)
+                safe_index = dec_input_indices.masked_fill(pad_mask, eos_id)   # gather-safe
 
-                # Zero out embeddings for padded positions
-                dec_input_embeds[~valid_mask] = 0
+                idx_expanded     = safe_index.unsqueeze(2).expand(-1, -1, self.hidden_dim)
+                dec_input_embeds = extended_node_feats.gather(dim=1, index=idx_expanded)  # (B, L-1, H)
+                dec_input_embeds = dec_input_embeds.masked_fill(pad_mask.unsqueeze(2), 0.0)
             else:
-                # No actual tokens (edge case: if seq_len == 1, sequence only contains EOS)
                 dec_input_embeds = torch.zeros(batch_size, 0, self.hidden_dim, device=device)
-            # Prepend the start token embedding
-            dec_input_embeds = torch.cat([start_token, dec_input_embeds], dim=1)  # shape: (batch, seq_len, hidden_dim)
-            # 2. **Decoder**: Use Transformer decoder with masked self-attention and cross-attention
-            # Create a causal mask to prevent positions from attending to future positions
-            L = dec_input_embeds.size(1)
-            tgt_mask = torch.triu(torch.full((L, L), float('-inf'), device=device), diagonal=1)
-            # Decode the whole sequence in one pass (teacher forcing)
-            dec_outputs = self.decoder(dec_input_embeds, extended_enc, tgt_mask=tgt_mask)  # (batch, seq_len, hidden_dim)
-            # 3. Compute pointer logits for each output position by dot product of dec outputs with encoder outputs
-            # Shape of pointer_logits: (batch, seq_len, n+1)
-            pointer_logits = torch.bmm(dec_outputs, extended_enc.transpose(1, 2))
-            # Compute loss over all time steps
-            # Flatten the sequences for cross-entropy: treat each output position as separate prediction
-            pointer_logits_flat = pointer_logits.reshape(batch_size * L, n + 1)
-            target_flat = target_seq.reshape(batch_size * L)
-            # Use ignore_index=-100 to ignore padded positions in loss
+
+            dec_inputs = torch.cat([start_token, dec_input_embeds], dim=1)     # (B, L, H)
+
+            # 3) Decode with causal mask
+            Lcur = dec_inputs.size(1)
+            tgt_mask = torch.triu(torch.full((Lcur, Lcur), float('-inf'), device=device), diagonal=1)
+            dec_outputs = self.decoder(dec_inputs, extended_enc, tgt_mask=tgt_mask)  # (B, L, H)
+
+            # 4) Pointer logits & loss (ignore_index = -100)
+            pointer_logits = torch.bmm(dec_outputs, extended_enc.transpose(1, 2))     # (B, L, n+1)
+            pointer_logits_flat = pointer_logits.reshape(batch_size * Lcur, n + 1)
+            target_flat = target_seq.reshape(batch_size * Lcur)
+
             loss = F.cross_entropy(pointer_logits_flat, target_flat, ignore_index=-100, reduction='sum')
-            # Average loss per output token
-            num_outputs = (target_flat != -100).sum().item()  # number of actual outputs (exclude padding)
-            avg_loss = loss / num_outputs
-            return avg_loss
+            denom = (target_flat != -100).sum().clamp_min(1).item()
+            return loss / denom
 
         else:
-            # **Inference mode** – generate a sequence of node indices
+            # ---------------- INFERENCE (greedy) ----------------
             output_sequences = [[] for _ in range(batch_size)]
-            # Prepare initial decoder input (start token)
-            dec_inputs = self.decoder_start.unsqueeze(0).expand(batch_size, 1, -1)  # (batch, 1, hidden_dim)
-            # We will append embeddings of selected nodes to `dec_inputs` iteratively
+            dec_inputs = self.decoder_start.unsqueeze(0).expand(batch_size, 1, -1)  # (B,1,H)
+
+            # Mask to forbid repeats (including EOS after chosen once)
+            selected_mask = torch.zeros(batch_size, n + 1, dtype=torch.bool, device=device)
+            done = torch.zeros(batch_size, dtype=torch.bool, device=device)
+
             for step in range(n + 1):
-                # Generate mask for current sequence length to ensure causal decoding
-                L = dec_inputs.size(1)
-                tgt_mask = torch.triu(torch.full((L, L), float('-inf'), device=device), diagonal=1)
-                # Run decoder on the current sequence to get outputs
-                dec_out = self.decoder(dec_inputs, extended_enc, tgt_mask=tgt_mask)  # (batch, L, hidden_dim)
-                # Take the last output vector for pointer selection
-                dec_hidden = dec_out[:, -1, :]  # shape: (batch, hidden_dim)
-                # Compute pointer logits over encoder nodes + EOS
-                logits = torch.bmm(extended_enc, dec_hidden.unsqueeze(2)).squeeze(2)  # (batch, n+1)
-                # No explicit mask of used indices (the model is trained to avoid repeats)
-                selected_idx = torch.argmax(logits, dim=1)  # (batch,)
-                # Append selected indices to output sequences
+                Lcur = dec_inputs.size(1)
+                tgt_mask = torch.triu(torch.full((Lcur, Lcur), float('-inf'), device=device), diagonal=1)
+                dec_out = self.decoder(dec_inputs, extended_enc, tgt_mask=tgt_mask)  # (B, Lcur, H)
+                dec_hidden = dec_out[:, -1, :]                                       # (B, H)
+
+                logits = torch.bmm(extended_enc, dec_hidden.unsqueeze(2)).squeeze(2) # (B, n+1)
+                logits = logits.masked_fill(selected_mask, float('-inf'))
+
+                selected_idx = torch.argmax(logits, dim=1)  # (B,)
+
                 for i in range(batch_size):
-                    idx = int(selected_idx[i].item())
-                    output_sequences[i].append(idx)
-                if step < n:  # prepare next decoder input if not the last step
-                    # Embed the selected indices for the next step
-                    # (Use the same extended_node_feats from above if available, else construct here)
-                    if 'extended_node_feats' not in locals():
-                        # If not already created, build extended node feature tensor (batch, n+1, hidden_dim)
-                        node_features = enc_input if self.enc_input_proj is not None else node_embeds
-                        eos_feat = torch.zeros(batch_size, 1, self.hidden_dim, device=device)
-                        extended_node_feats = torch.cat([node_features, eos_feat], dim=1)
-                    # Gather embeddings for selected indices (batch, hidden_dim)
+                    if not done[i]:
+                        idx = int(selected_idx[i].item())
+                        output_sequences[i].append(idx)
+                        selected_mask[i, idx] = True
+                        if idx == eos_id:
+                            done[i] = True
+
+                if done.all():
+                    break
+
+                if step < n:
                     idx_exp = selected_idx.unsqueeze(1).unsqueeze(2).expand(-1, 1, self.hidden_dim)
-                    next_embed = extended_node_feats.gather(dim=1, index=idx_exp).squeeze(1)  # (batch, hidden_dim)
-                    # Append to decoder input sequence for next iteration
+                    next_embed = extended_node_feats.gather(dim=1, index=idx_exp).squeeze(1)  # (B, H)
                     dec_inputs = torch.cat([dec_inputs, next_embed.unsqueeze(1)], dim=1)
+
             return output_sequences
