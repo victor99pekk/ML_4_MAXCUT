@@ -2,7 +2,7 @@
 
 This repository contains the code for my study `maximum cut: learning based approaches`, where I __(i)__ explored ways of generating training with planted solutions for the (SL) of the `NP-hard` problem maxcut, __(ii)__ trained `neural models` to solve maxcut, __(iii)__ studied the properties of the graphs we can generate with planted solutions, as well as studied the `Geonman & Williamson` lower bound to derive `FS-graphs` which are harder for heuristic algorithms to solve and where learning based approaches might have a benefit.
 
-`run_on_gpu.ipynb` provides an easy tutorial how you can generate data and train the models used in this project. This can be done on either GPUs with cuda, or on a cpu.\
+`run_on_gpu.ipynb` provides an easy tutorial how you can generate data and train the models used in this project. This can be done on either GPUs (free via opening this the notebook in google colba) with cuda, or on a cpu.\
 __link__: [run_on_gpu.ipynb](run_on_gpu.ipynb)
 
 ### Other links in repo

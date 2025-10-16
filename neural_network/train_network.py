@@ -6,11 +6,10 @@ import numpy as np
 import torch
 from models.PointerNet import *
 from models.TransformerPointer import *
-from models.utils import *
-from rl_utils import *
 import matplotlib.pyplot as plt
 from torch.cuda.amp import autocast, GradScaler
 import math
+import traceback
 
 
 def partition_to_sequence(bits):
@@ -126,17 +125,19 @@ def training_loop_AMP_optimized(mc, model,
                 #forward + backward with mixed precision
                 with autocast():
                     try:
-                        loss_batch = model(batch_X, target_seq=batch_targets)
+                        loss_batch  = model(batch_X, target_seq=batch_targets)
+                        print(f"\n\nloss_batch: {accumulation_steps}\n\n")
                     except Exception as e:
                         print(f"Exception in model forward: {e}")
-                        import traceback
                         traceback.print_exc()
                         raise  # Optionally re-raise to stop execution
+                    print("\n\neeeee")
                     loss = loss_batch / accumulation_steps
-
+                    print("\n\nwwwww")
+                print("\n\nqqqq")
                 scaler.scale(loss).backward()
                 epoch_loss += loss_batch.item() * idx.size(0)
-
+                print("\n\nhhhhhh")
                 # optimizer step every accumulation_steps
                 if ((batch_idx // batch_size + 1) % accumulation_steps == 0) or (batch_idx + batch_size >= N_train):
                     scaler.step(optimizer)
@@ -266,7 +267,6 @@ def main():
     hidden_dim    = 256
     batch_size    = 20
     num_epochs_sl = 1 * 10**3  # Supervised pretrain epochs
-    num_epochs_rl = 1 * 10**2  # RL fine-tune epochs
     lr            = 0.001
     
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
@@ -285,7 +285,7 @@ def main():
     device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     X_train_t = torch.tensor(X_train, device=device)  # shape (N_train, n, n)
     X_test_t  = torch.tensor(X_test,  device=device)  # shape (N_test,  n, n)
-    Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) 
+    # Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) 
     Y_test_t  = torch.tensor(Y_test,  device=device)
     X_eval_t = torch.tensor(X_val, device=device)
     Y_eval_t = torch.tensor(Y_val, device=device)
@@ -301,8 +301,6 @@ def main():
                             embedding_dim=embedding_dim,
                             hidden_dim=hidden_dim,
                             graph_encoding=graph_encoding).to(device)
-    attach_sampling_methods(model)
-    attach_greedy_decode(model) 
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 
     if load:
@@ -312,20 +310,10 @@ def main():
     run_start = time.perf_counter()
     try:
         samples_seen = training_loop_AMP_optimized(
-            test_cuts, model, optimizer, X_train_t, Y_train, n, batch_size, num_epochs_sl,
-            train_seqs, X_test_t, Y_test, folder_path, test_accs, train_losses
+            test_cuts, model, optimizer, X_train_t, n, batch_size, num_epochs_sl,
+            train_seqs, X_test_t, Y_test, test_accs, train_losses
         )
-        if fine_tune_rl: # RL fine-tune
-            Y_train_t = torch.tensor(Y_train, device=device)  # (N, n) ±1
-            Y_test_t  = torch.tensor(Y_test,  device=device)
-            samples_seen = training_loop_policy_gradient(
-                test_cuts, model, optimizer,
-                X_train_t, Y_train_t, n,
-                batch_size, num_epochs_rl,
-                train_seqs, X_test_t, Y_test_t,
-                folder_path, test_accs, train_losses,
-                lam_sup=0.1, lam_rl=1.0, entropy_beta=0.01, temperature=1.0
-            )
+
     except KeyboardInterrupt:
         print("\n[Ctrl-C] KeyboardInterrupt caught – leaving training loop early …")
     finally:
