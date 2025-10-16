@@ -76,7 +76,7 @@ def evaluate(mc, model, X, Y, n):
     return acc
 
 
-def training_loop_AMP_optimized(mc, model,
+def training_loop(mc, model,
                   optimizer,
                   X_train_t,
                   n,
@@ -113,6 +113,9 @@ def training_loop_AMP_optimized(mc, model,
             perm = torch.randperm(N_train, device=device)
             epoch_loss = 0.0
             optimizer.zero_grad()
+
+            if n > 50:
+                !make gen_data graph_type={graph_type} nbr_nodes={n} data_type=train
 
             for batch_idx in range(0, N_train, batch_size):
                 idx = perm[batch_idx:batch_idx + batch_size]
@@ -250,6 +253,7 @@ def main():
                         help='Model type to use')
     parser.add_argument('--rl', type=bool, help='Fine-tune with RL', default=False)
     parser.add_argument('--graph_encoding', type=bool, help='Use graph encoding (GAT)', default=False)
+    parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     args = parser.parse_args()
 
     n = args.nbr_nodes
@@ -309,7 +313,7 @@ def main():
     samples_seen = 0
     run_start = time.perf_counter()
     try:
-        samples_seen = training_loop_AMP_optimized(
+        samples_seen = training_loop(
             test_cuts, model, optimizer, X_train_t, n, batch_size, num_epochs_sl,
             train_seqs, X_test_t, Y_test, test_accs, train_losses
         )

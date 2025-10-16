@@ -94,8 +94,8 @@ def make_dataset(
                         outside_measure += abs(item - 1)
                     else:
                         outside_measure += abs(item)
-            W = np.round(W, 2)
-            cut_val = np.round(cut_val, 2)
+            W = np.round(W, 5)
+            cut_val = np.round(cut_val, 5)
 
             row = np.concatenate([W.ravel(), (x == 1).astype(int), [cut_val]])
             f.write(",".join(map(str, row)) + "\n")
@@ -248,8 +248,8 @@ if __name__ == "__main__":
         os.makedirs(folder)
 
     if args.data_type == "train":
-        num_graphs = {5: 100_000, 10: 100_000, 20: 100_000,
-                      30: 100_000, 50: 100_000, 70: 80_000,
+        num_graphs = {5: 20_000, 10: 50_000, 20: 70_000,
+                      30: 100_000, 50: 70_000, 70: 70_000,
                       100: 40_000}.get(N, 10)
     elif args.data_type == "test" or args.data_type == "validation":
         num_graphs = 1_000
