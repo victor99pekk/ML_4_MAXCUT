@@ -13,3 +13,4 @@ __pycache__/
 *.pack
 __MACOSX/
 .DS_Store
+venv/

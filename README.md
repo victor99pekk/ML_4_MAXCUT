@@ -5,8 +5,8 @@ This repository contains the code for my study `maximum cut: learning based appr
 `run_on_gpu.ipynb` provides an easy tutorial how you can generate data and train the models used in this project. This can be done on either GPUs with cuda, or on a cpu.\
 __link__: [run_on_gpu.ipynb](run_on_gpu.ipynb)
 
-### Other links
+### Other links in repo
 `(i)`     [data generation](data/gen_maxcut_data.py)\
 `(ii)`    [Neural models](neural_network/models/)\
 `(iii)`   [training of networks](neural_network/train_network.py)\
-`(iv)`.   [sources](pdfs/)
+`(iv)`   [sources](pdfs/)
