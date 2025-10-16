@@ -6,7 +6,7 @@ This repository contains the code for my study `maximum cut: learning based appr
 __link__: [run_on_gpu.ipynb](run_on_gpu.ipynb)
 
 ### Other links
-`(i)` [data generation](data/gen_maxcut_data.py)\
-`(ii)` [Neural models](neural_network/models/)\
-`(iii)` [training of networks](neural_network/train_network.py)\
-`(iv)`[sources](pdfs/)
+`(i)`     [data generation](data/gen_maxcut_data.py)\
+`(ii)`    [Neural models](neural_network/models/)\
+`(iii)`   [training of networks](neural_network/train_network.py)\
+`(iv)`.   [sources](pdfs/)
