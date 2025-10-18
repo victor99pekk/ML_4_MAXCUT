@@ -69,19 +69,20 @@ def partition_match_ratio_torch(pred: torch.Tensor, target: torch.Tensor) -> tor
     # complement-invariant accuracy
     return torch.maximum(matches, diffs).to(torch.float32) / float(n)
 
-def measure_inference_speed(model, X):
+def measure_inference_speed(model, X, device, compile_model: bool = False):
+    if compile_model:
+        model._compiled = torch.compile(model)
+        print("[measure_inference_speed] model compiled with torch.compile")
     model.eval()
-    device = next(model.parameters()).device
-    import time
     X = X.to(device)
     with torch.no_grad():
         start_time = time.perf_counter()
-        for x in X:
-            _ = model(x.unsqueeze(0))
+        for i in range(X.size(0)):
+            _ = model(X[i].unsqueeze(0))
         end_time = time.perf_counter()
     total_time = end_time - start_time
     avg_time_per_instance = total_time / X.size(0)
-    print(f"Average inference time per instance: {avg_time_per_instance*1000:.2f} ms")
+    print(f"\nAverage inference time per instance: {avg_time_per_instance*1000:.2f} ms")
     model.train()
 
 def evaluate(mc, model, X, Y, n):
@@ -350,20 +351,20 @@ def main():
     finally:
         print("Training complete. Saving model state...")
         try:
-            measure_inference_speed(model, X_train_t)
-            torch.save(model.state_dict(), f"{folder_path}/weights.pth")
-            torch.save(model.state_dict(), "most_recent_weights.pth")
+            measure_inference_speed(model, X_eval_t[:1000], device)
+            measure_inference_speed(model, X_eval_t[:1000], device, compile_model=True)
+            #torch.save(model.state_dict(), "most_recent_weights.pth")
             print("Model weights saved.")
         except Exception as e:
             print(f"Failed to save model weights: {e}")
         test_acc = evaluate(eval_cuts, model, X_eval_t, Y_eval_t, n)
         dur = time.perf_counter() - run_start
         try:
-            write_experiment_info_txt(
-                i, model, optimizer, batch_size, samples_seen, num_epochs_sl, lr, n, train_file, test_file,
-                test_acc, train_losses[-1] if train_losses else float('nan'), dur, out_file, load, 
-                weights_path=weights_path
-            )
+            # write_experiment_info_txt(
+            #     i, model, optimizer, batch_size, samples_seen, num_epochs_sl, lr, n, train_file, test_file,
+            #     test_acc, train_losses[-1] if train_losses else float('nan'), dur, out_file, load, 
+            #     weights_path=weights_path
+            # )
             print("Experiment info saved.")
         except Exception as e:
             print(f"Failed to save experiment info: {e}")
