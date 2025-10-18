@@ -321,6 +321,7 @@ def main():
         print("Training complete. Saving model state...")
         try:
             torch.save(model.state_dict(), f"{folder_path}/weights.pth")
+            torch.save(model.state_dict(), "most_recent_weights.pth")
             print("Model weights saved.")
         except Exception as e:
             print(f"Failed to save model weights: {e}")

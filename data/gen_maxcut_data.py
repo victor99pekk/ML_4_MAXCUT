@@ -236,6 +236,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate planted Max-Cut instances via BQP method.")
     parser.add_argument("--nbr_nodes", type=int, required=True, help="Number of nodes in each graph.")
     parser.add_argument("--data_type", choices=["train", "test", "debug", "validation"], default="debug")
+    parser.add_argument("--nbr_graphs", type=int, default=1000, help="Number of graphs to generate.")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--graph_type", choices=["bqp_planting", "projection_planting", "fs_hard"], default="bqp_planting",
                         help="Type of graph to generate")
@@ -247,15 +248,7 @@ if __name__ == "__main__":
     if not os.path.exists(folder):
         os.makedirs(folder)
 
-    if args.data_type == "train":
-        num_graphs = {5: 20_000, 10: 50_000, 20: 70_000,
-                      30: 100_000, 50: 70_000, 70: 70_000,
-                      100: 40_000}.get(N, 10)
-    elif args.data_type == "test" or args.data_type == "validation":
-        num_graphs = 1_000
-    else:  # "debug" or others
-        print("Debug mode: generating only 3 graphs.")
-        num_graphs = 3
+    num_graphs = args.nbr_graphs
 
     out_file = os.path.join(folder, f"{args.data_type}_n={N}.csv")
     time0 = time.time()
