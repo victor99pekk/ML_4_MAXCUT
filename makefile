@@ -10,11 +10,11 @@ all: gen_data
 .PHONY: gen_data
 gen_data:
 # make gen_data datatyope=debug nbr_nodes=21
-	python3 $(ROOT_DIR)/data/gen_maxcut_data.py --nbr_nodes $(nbr_nodes) --graph_type $(graph_type) --data_type $(data_type)
+	python3 $(ROOT_DIR)/data/gen_maxcut_data.py --nbr_nodes $(nbr_nodes) --graph_type $(graph_type) --data_type $(data_type) --nbr_graphs $(nbr_graphs)
 
 train:
 #!python neural_network/train_network.py
-	python3 $(ROOT_DIR)/neural_network/train_network.py --nbr_nodes $(nbr_nodes) --model $(model) --graph_encoding $(graph_encoding) ----learning_rate $(learning_rate)
+	python3 $(ROOT_DIR)/neural_network/train_network.py --nbr_nodes $(nbr_nodes) --model $(model) --graph_encoding $(graph_encoding) --learning_rate $(learning_rate)
 
 evaluate:
 	python3 $(ROOT_DIR)/neural_network/evaluate_network.py --n $(n) --model $(model) --compile_model $(compile_model)

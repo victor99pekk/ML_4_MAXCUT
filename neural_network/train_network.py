@@ -56,11 +56,40 @@ def cut_value(output, matrix):
                 value += matrix[i, j]
     return value
 
+@torch.no_grad()
+def partition_match_ratio_torch(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    if pred.shape != target.shape or pred.ndim != 1:
+        raise ValueError("Use 1D tensors of the same shape.")
+    # work in bool to use logical XOR efficiently
+    pred_b = pred.to(torch.bool)
+    target_b = target.to(torch.bool)
+    diffs = torch.sum(pred_b ^ target_b)  # count where they differ
+    n = pred_b.numel()
+    matches = n - diffs
+    # complement-invariant accuracy
+    return torch.maximum(matches, diffs).to(torch.float32) / float(n)
+
+def measure_inference_speed(model, X):
+    model.eval()
+    device = next(model.parameters()).device
+    import time
+    X = X.to(device)
+    with torch.no_grad():
+        start_time = time.perf_counter()
+        for x in X:
+            _ = model(x.unsqueeze(0))
+        end_time = time.perf_counter()
+    total_time = end_time - start_time
+    avg_time_per_instance = total_time / X.size(0)
+    print(f"Average inference time per instance: {avg_time_per_instance*1000:.2f} ms")
+    model.train()
+
 def evaluate(mc, model, X, Y, n):
     model.eval()
     with torch.no_grad():
         outputs = model(X)
         total_cut = 0
+        partition_acc = 0.0
         for i, out_seq in enumerate(outputs):
             eos_pos = out_seq.index(n) if n in out_seq else len(out_seq)
             chosen = set(out_seq[:eos_pos])
@@ -68,12 +97,18 @@ def evaluate(mc, model, X, Y, n):
             pred[list(chosen)] = 1
             mat = X[i].detach().cpu().numpy()  # ensure NumPy
             total_cut += cut_value(pred, mat)
+            partition_acc += partition_match_ratio_torch(
+                torch.tensor(pred, device=X.device),
+                torch.tensor(Y[i], device=X.device)
+            ).item()
 
         mc = float(mc.sum().item())
-        acc = total_cut / mc if mc != 0 else float('nan')
-        print(f"\ncut / optimal: {total_cut}/{mc}  =  {max(acc, 0.0):.5f}")
+        score_acc = total_cut / mc if mc != 0 else float('nan')
+        
+        print(f"\ncut / optimal: {round(total_cut)}/{round(mc)}  =  {max(score_acc, 0.0):.5f}")
+        print(f"partition accuracy:                   {partition_acc/len(Y):3f}\n")
     model.train()
-    return acc
+    return score_acc
 
 
 def training_loop(mc, model,
@@ -126,18 +161,13 @@ def training_loop(mc, model,
                 with autocast():
                     try:
                         loss_batch  = model(batch_X, target_seq=batch_targets)
-                        print(f"\n\nloss_batch: {accumulation_steps}\n\n")
                     except Exception as e:
                         print(f"Exception in model forward: {e}")
                         traceback.print_exc()
                         raise  # Optionally re-raise to stop execution
-                    print("\n\neeeee")
                     loss = loss_batch / accumulation_steps
-                    print("\n\nwwwww")
-                print("\n\nqqqq")
                 scaler.scale(loss).backward()
                 epoch_loss += loss_batch.item() * idx.size(0)
-                print("\n\nhhhhhh")
                 # optimizer step every accumulation_steps
                 if ((batch_idx // batch_size + 1) % accumulation_steps == 0) or (batch_idx + batch_size >= N_train):
                     scaler.step(optimizer)
@@ -268,7 +298,7 @@ def main():
     hidden_dim    = 256
     batch_size    = 20
     num_epochs_sl = 1 * 10**3  # Supervised pretrain epochs
-    lr            = 0.001
+    lr            = args.learning_rate
     
     weights_path = f"neural_network/experiments/{model_name}/nbr_12/weights.pth"
 
@@ -320,6 +350,7 @@ def main():
     finally:
         print("Training complete. Saving model state...")
         try:
+            measure_inference_speed(model, X_train_t)
             torch.save(model.state_dict(), f"{folder_path}/weights.pth")
             torch.save(model.state_dict(), "most_recent_weights.pth")
             print("Model weights saved.")

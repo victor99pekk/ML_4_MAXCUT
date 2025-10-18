@@ -83,7 +83,7 @@ def make_dataset(
             elif graph_type == "fs_hard":
                 W, x, cut_val = gen_fs_hard(n=n)
             elif graph_type == "bqp_planting":
-                W, x, cut_val = bqp_plantinng(n=n)
+                W, x, cut_val = bqp_planting(n=n)
             else:
                 raise ValueError(f"Unknown graph_type '{graph_type}'")
             for item in W.flatten():
@@ -140,41 +140,53 @@ def gen_fs_hard(n, d=int(3e3), theta1_deg=89, theta2_deg=91, rng=None):
     m = n*(n-1)/2; avg = W.sum()/(2*m)
     return gw_score(W/avg if avg > 0 else W, find_cut=True)
 
-def bqp_plantinng(n, base=10.0, seed=None):
-    """
-    Generate ONE Max-Cut instance using the 'keeping equivalence' planting scheme.
-    """
+import numpy as np
 
+def bqp_planting(n_inner: int, base: float = 10.0, seed: int | None = None):
+    """
+    Generate ONE planted Max-Cut instance (keeping-equivalence style).
+
+    Parameters
+    ----------
+    n_inner : int
+        Size of the original BQP (before augmentation). Returned graph has n_inner+1 nodes.
+    base : float
+        Scale for the random symmetric matrix Q ~ N(0, base^2).
+    seed : int | None
+        RNG seed.
+
+    Returns
+    -------
+    W : (n_inner+1, n_inner+1) np.ndarray
+        Symmetric weight matrix with zero diagonal (augmented graph).
+    s01 : (n_inner+1,) np.ndarray
+        Planted labels in {0, 1}, with s01[0] = 1 for the new node.
+    cut_value : float
+        Cut value of (W, s01), computed consistently on the returned instance.
+    """
     rng = np.random.RandomState(seed) if seed is not None else np.random
-    n = n - 1
-    Q = rng.randn(n, n) * base
+    Q = rng.randn(n_inner, n_inner) * base
     Q = 0.5 * (Q + Q.T)
-    x = rng.randint(0, 2, size=n)
-    x_star = (2 * x - 1).astype(np.float64)
-
+    x01 = rng.randint(0, 2, size=n_inner)
+    x_star = (2 * x01 - 1).astype(np.float64)
     absQ = np.abs(Q)
     lam = absQ.sum(axis=1) - np.diag(absQ)
-
-    c = Q.dot(x) + lam * x_star
-
+    c = Q @ x_star + lam * x_star
+    upper = np.triu(Q, k=1) * 0.25
+    W = np.zeros((n_inner + 1, n_inner + 1), dtype=np.float64)
+    W[1:, 1:] = upper + upper.T
     row_sums_offdiag = Q.sum(axis=1) - np.diag(Q)
     w0 = 0.25 * row_sums_offdiag + 0.5 * c
-
-    W = np.zeros((n + 1, n + 1), dtype=np.float64)
-    upper = np.triu(Q, k=1) * 0.25
-    W[1:, 1:] = upper + upper.T
-
     W[0, 1:] = w0
     W[1:, 0] = w0
     np.fill_diagonal(W, 0.0)
+    s01 = np.empty(n_inner + 1, dtype=np.int8)
+    s01[0] = 1
+    s01[1:] = x01.astype(np.int8)
+    t = 2 * s01 - 1
+    cut_value = 0.25 * float(np.sum(W * (1.0 - np.outer(t, t))))
+    return W, s01, cut_value
 
-    # planted labels on augmented graph
-    s = np.empty(n + 1, dtype=np.float64)
-    s[0] = 1.0
-    s[1:] = x_star
-    cut_value = 0.25 * float(np.sum(Q * (1 - np.outer(x_star, x_star))))
-
-    return W, s, cut_value
 
 def generate_psd_matrix(n):
     """Generates a random NSD matrix of size n x n."""
