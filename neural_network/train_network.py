@@ -114,9 +114,6 @@ def training_loop(mc, model,
             epoch_loss = 0.0
             optimizer.zero_grad()
 
-            if n > 50:
-                !make gen_data graph_type={graph_type} nbr_nodes={n} data_type=train
-
             for batch_idx in range(0, N_train, batch_size):
                 idx = perm[batch_idx:batch_idx + batch_size]
                 batch_X = X_train_t[idx].to(device)
