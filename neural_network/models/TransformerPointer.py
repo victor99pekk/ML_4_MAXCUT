@@ -139,5 +139,4 @@ class TransformerNetwork(nn.Module):
                     idx_exp = selected_idx.unsqueeze(1).unsqueeze(2).expand(-1, 1, self.hidden_dim)
                     next_embed = extended_node_feats.gather(dim=1, index=idx_exp).squeeze(1)  # (B, H)
                     dec_inputs = torch.cat([dec_inputs, next_embed.unsqueeze(1)], dim=1)
-
             return output_sequences
