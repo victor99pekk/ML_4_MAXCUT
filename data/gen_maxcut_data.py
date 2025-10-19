@@ -140,7 +140,6 @@ def gen_fs_hard(n, d=int(3e3), theta1_deg=89, theta2_deg=91, rng=None):
     m = n*(n-1)/2; avg = W.sum()/(2*m)
     return gw_score(W/avg if avg > 0 else W, find_cut=True)
 
-import numpy as np
 
 def bqp_planting(n_inner: int, base: float = 10.0, seed: int | None = None):
     """
@@ -180,9 +179,9 @@ def bqp_planting(n_inner: int, base: float = 10.0, seed: int | None = None):
     W[0, 1:] = w0
     W[1:, 0] = w0
     np.fill_diagonal(W, 0.0)
-    s01 = np.empty(n_inner + 1, dtype=np.int8)
+    s01 = np.empty(n_inner + 1, dtype=np.float64)
     s01[0] = 1
-    s01[1:] = x01.astype(np.int8)
+    s01[1:] = x01.astype(np.float64)
     t = 2 * s01 - 1
     cut_value = 0.25 * float(np.sum(W * (1.0 - np.outer(t, t))))
     return W, s01, cut_value
