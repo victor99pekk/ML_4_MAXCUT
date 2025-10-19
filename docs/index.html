@@ -1,6 +1,27 @@
-<!doctype html><meta charset="utf-8">
+<!doctype html>
+<meta charset="utf-8">
 <title>Max-Cut Paper</title>
-<style>html,body{height:100%;margin:0}.viewer{width:100%;height:100vh;border:0}</style>
-<object class="viewer" data="paper.pdf" type="application/pdf">
-  <p>Browser can’t display PDFs. <a href="paper.pdf">Download the PDF</a>.</p>
-</object>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body { height:100%; margin:0; }
+  .viewer { width:100%; height:100vh; border:0; display:block; }
+  .fallback { position:absolute; inset:0; display:grid; place-items:center; font:16px system-ui; }
+  .hidden { display:none; }
+  a.btn { padding:12px 18px; border:1px solid #999; border-radius:8px; text-decoration:none; }
+</style>
+<object id="pdf" class="viewer" data="paper.pdf?v=2" type="application/pdf"></object>
+<div id="fb" class="fallback hidden">
+  <div>
+    <p>Can’t display the PDF inline.</p>
+    <p><a class="btn" href="paper.pdf?v=2" download>Download the PDF</a></p>
+  </div>
+</div>
+<script>
+  // If the PDF fails to load (e.g., wrong path/LFS pointer), reveal fallback.
+  const pdf = document.getElementById('pdf');
+  const fb  = document.getElementById('fb');
+  let shown = false;
+  const t = setTimeout(() => { if (!shown) fb.classList.remove('hidden'); }, 1500);
+  pdf.addEventListener('load', () => { shown = true; clearTimeout(t); });
+  pdf.addEventListener('error', () => { fb.classList.remove('hidden'); });
+</script>
